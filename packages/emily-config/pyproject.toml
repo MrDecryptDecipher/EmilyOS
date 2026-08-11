@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emily-config"
+version = "0.1.0"
+description = "Emily OS typed configuration"
+requires-python = ">=3.12"
+dependencies = [
+  "emily-core",
+  "pydantic>=2.11.0",
+  "pydantic-settings>=2.10.0",
+  "python-dotenv>=1.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["emily*"]
+namespaces = true

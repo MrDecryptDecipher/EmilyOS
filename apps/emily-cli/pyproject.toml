@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emily-cli"
+version = "0.1.0"
+description = "Emily OS operator CLI"
+requires-python = ">=3.12"
+dependencies = [
+  "emily-kernel",
+  "emily-config",
+  "typer>=0.17.4",
+  "rich>=14.1.0",
+]
+
+[project.scripts]
+emily = "emily_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["emily_cli*"]

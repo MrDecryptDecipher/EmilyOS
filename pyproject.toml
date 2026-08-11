@@ -1,0 +1,121 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emily-os"
+version = "0.1.0"
+description = "Emily OS — AI-native desktop operating platform"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Emily OS Contributors" }]
+keywords = ["ai", "operating-system", "agents", "langgraph", "mcp", "windows"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-asyncio>=0.24.0",
+  "pytest-cov>=5.0.0",
+  "ruff>=0.9.0",
+  "black>=25.1.0",
+  "mypy>=1.14.0",
+  "types-requests>=2.32.0",
+]
+
+[tool.setuptools]
+packages = []
+
+[tool.uv.workspace]
+members = [
+  "packages/emily-core",
+  "packages/emily-events",
+  "packages/emily-config",
+  "packages/emily-observability",
+  "packages/emily-kernel",
+  "apps/emily-cli",
+]
+
+[tool.uv.sources]
+emily-core = { workspace = true }
+emily-events = { workspace = true }
+emily-config = { workspace = true }
+emily-observability = { workspace = true }
+emily-kernel = { workspace = true }
+emily-cli = { workspace = true }
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests", "packages", "apps"]
+pythonpath = [
+  "packages/emily-core/src",
+  "packages/emily-events/src",
+  "packages/emily-config/src",
+  "packages/emily-observability/src",
+  "packages/emily-kernel/src",
+  "apps/emily-cli/src",
+]
+addopts = "-q --strict-markers --cov=emily --cov-report=term-missing"
+
+[tool.coverage.run]
+branch = true
+source = ["emily"]
+
+[tool.coverage.report]
+fail_under = 70
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = [
+  "packages/emily-core/src",
+  "packages/emily-events/src",
+  "packages/emily-config/src",
+  "packages/emily-observability/src",
+  "packages/emily-kernel/src",
+  "apps/emily-cli/src",
+  "tests",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "ASYNC", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["N802"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+plugins = ["pydantic.mypy"]
+mypy_path = [
+  "packages/emily-core/src",
+  "packages/emily-events/src",
+  "packages/emily-config/src",
+  "packages/emily-observability/src",
+  "packages/emily-kernel/src",
+  "apps/emily-cli/src",
+]
+packages = ["emily", "emily_cli"]
+namespace_packages = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false

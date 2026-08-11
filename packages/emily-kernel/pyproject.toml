@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emily-kernel"
+version = "0.1.0"
+description = "Emily OS executive kernel"
+requires-python = ">=3.12"
+dependencies = [
+  "emily-core",
+  "emily-events",
+  "emily-config",
+  "emily-observability",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["emily*"]
+namespaces = true
