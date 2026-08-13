@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emily-voice"
+version = "0.1.0"
+description = "Emily OS local-first voice runtime — ASR, TTS, VAD, Speech Director"
+requires-python = ">=3.12"
+dependencies = [
+  "emily-core",
+  "emily-config",
+  "emily-events",
+  "emily-observability",
+  "emily-kernel",
+  "emily-tools",
+  "emily-providers",
+  "pydantic>=2.11.0",
+  "numpy>=1.26.0",
+  "soundfile>=0.12.1",
+]
+
+[project.optional-dependencies]
+kokoro = ["kokoro>=0.9.2", "torch"]
+chatterbox = ["chatterbox-tts"]
+indicf5 = [
+  "transformers==4.49.0",
+  "accelerate>=0.33.0",
+  "huggingface_hub>=0.20.0",
+]
+# Runtime also needs f5_tts from: pip install "git+https://github.com/ai4bharat/IndicF5.git"
+asr = ["faster-whisper"]
+audio = ["sounddevice"]
+wakeword = ["openwakeword"]
+full = [
+  "kokoro>=0.9.2",
+  "torch",
+  "chatterbox-tts",
+  "transformers>=4.49.0",
+  "accelerate>=0.33.0",
+  "huggingface_hub>=0.20.0",
+  "faster-whisper",
+  "sounddevice",
+  "openwakeword",
+]
+# IndicF5 weights are gated on HuggingFace (ai4bharat/IndicF5).
+# Chatterbox upstream is tested on Python 3.11; on 3.12 use a 3.11 venv if pip fails.
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["emily*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
