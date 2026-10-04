@@ -67,7 +67,12 @@ inspectable. Emily closes that gap with one platform:
 
 The whole capability map, from the executive kernel down to the runtimes:
 
-```mermaid
+![Emily OS capability map](docs/diagrams/capability-map.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart TB
   ROOT(["Emily OS"])
   ROOT --> A["Executive Kernel"]
@@ -101,6 +106,7 @@ flowchart TB
   E --> E2["Workbench UI"]
   E --> E3["Voice cockpit"]
 ```
+</details>
 
 ## Architecture
 
@@ -109,7 +115,12 @@ capability lives in a package that implements a protocol port defined in
 `emily-core`, communicates over the event bus, and registers its tools with the
 unified tool runtime.
 
-```mermaid
+![Kernel architecture](docs/diagrams/architecture.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart TB
   subgraph UX["Experience layer"]
     CLI["emily CLI - 72 commands"]
@@ -153,11 +164,17 @@ flowchart TB
   RUNTIMES -. events .-> BUS
   TRUST -. events .-> BUS
 ```
+</details>
 
 **Kernel lifecycle** - start and stop ordering is priority-driven; a failed
 start flips the kernel to `FAILED` and surfaces the error.
 
-```mermaid
+![Kernel lifecycle](docs/diagrams/kernel-lifecycle.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 stateDiagram-v2
   [*] --> CREATED
   CREATED --> INITIALIZING
@@ -169,12 +186,18 @@ stateDiagram-v2
   FAILED --> [*]
   STOPPED --> [*]
 ```
+</details>
 
 **Event model** - one in-process async bus with prefix subscriptions,
 middleware "onion" wrapping, and per-handler exception isolation so a failing
 subscriber can never break delivery.
 
-```mermaid
+![Event model](docs/diagrams/event-model.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   P["Publisher"] --> EB["AsyncEventBus"]
   EB --> MW["Middleware onion"]
@@ -183,13 +206,19 @@ flowchart LR
   MW --> S3["Subscriber C"]
   S2 -. handler error isolated .-> EB
 ```
+</details>
 
 ## How a mission runs
 
 A mission is the unit of work: `Mission -> Objective -> Task`, executed on a
 LangGraph backbone with checkpoints and first-class pause, resume, and cancel.
 
-```mermaid
+![Mission lifecycle](docs/diagrams/mission-sequence.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 sequenceDiagram
   autonumber
   actor U as User
@@ -217,10 +246,16 @@ sequenceDiagram
   M-->>CLI: durable mission archive
   CLI-->>U: summary tokens and cost
 ```
+</details>
 
 Execution graph:
 
-```mermaid
+![Mission execution graph](docs/diagrams/execution-graph.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   PLAN["plan"] --> EXEC["execute"]
   EXEC --> VERIFY["verify"]
@@ -229,6 +264,7 @@ flowchart LR
   VERIFY -->|retry| EXEC
   REFLECT -->|revise| EXEC
 ```
+</details>
 
 The planner is **provider-backed and fails closed** - it never emits a silent
 fake plan; a deterministic heuristic path is used only when explicitly
@@ -238,7 +274,12 @@ requested.
 
 ### Provider fabric
 
-```mermaid
+![Provider failover](docs/diagrams/provider-failover.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 sequenceDiagram
   participant R as ProviderRouter
   participant N as NVIDIA NIM
@@ -251,6 +292,7 @@ sequenceDiagram
     S-->>R: completion plus analytics
   end
 ```
+</details>
 
 Two adapters over one OpenAI-compatible transport, default-on failover,
 transport retries, streaming SSE parsing, and per-call cost accounting.
@@ -262,7 +304,12 @@ pool, and driven through a work, verify, critique, and capped-retry loop that
 returns a structured `VerificationDecision`. Teams run as sequential pipelines
 with handoff, or concurrent fan-out.
 
-```mermaid
+![Multi-agent verification loop](docs/diagrams/agent-verification.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   W["work"] --> V["verify"]
   V -->|pass| DONE["accept"]
@@ -274,6 +321,7 @@ flowchart LR
     A1["researcher"] --> A2["coder"] --> A3["verifier"]
   end
 ```
+</details>
 
 ### Memory & world model
 
@@ -281,7 +329,12 @@ Sixteen `MemoryKind` tiers with a weighted lexical retriever, a consolidator
 that promotes short-term into long-term, and a world model that continuously
 upserts entities, relations, and facts.
 
-```mermaid
+![Memory and world model](docs/diagrams/memory-world-model.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart TB
   EV["mission and agent events"] --> STORE["MemoryStore - working + episodic + semantic + task + preferences"]
   STORE --> RET["LexicalRetriever - 0.55 overlap + 0.25 importance + 0.20 recency"]
@@ -291,6 +344,7 @@ flowchart TB
   WM --> REL["Relations"]
   WM --> FACT["Facts - capped and snapshotted"]
 ```
+</details>
 
 ## Runtimes: tools, desktop, browser, voice, vision
 
@@ -298,7 +352,12 @@ One permission-gated tool runtime fronts every capability. Built-in, MCP, and
 plugin tools share a single registry, and MCP servers are discovered and
 hot-reloaded over a real stdio JSON-RPC client.
 
-```mermaid
+![Unified tool and MCP runtime](docs/diagrams/tool-runtime.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   AG["Agent"] --> REG["Tool registry - 30 tools"]
   REG --> POL{"Permission policy - 8 levels + capability token"}
@@ -311,8 +370,14 @@ flowchart LR
   EX --> S["vision tools"]
   EX --> M["mcp tools - hot reload"]
 ```
+</details>
 
-```mermaid
+![Runtime capabilities](docs/diagrams/runtime-capabilities.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart TB
   AG["Agent or mission"] --> D["Desktop runtime"]
   AG --> B["Browser runtime"]
@@ -332,11 +397,17 @@ flowchart TB
   VI --> VI1["Screen OCR - Tesseract or winOCR"]
   VI --> VI2["YOLOv8 objects + DeepFace emotion"]
 ```
+</details>
 
 **Voice routing** picks a backend by language support, hardware, and
 expressiveness, and keeps a backend pinned for a consistent turn:
 
-```mermaid
+![Voice TTS routing](docs/diagrams/voice-routing.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   T["Text + language"] --> SD["Speech Director - emotion + pace + segments"]
   SD --> RT{"TTS router - scored fallback"}
@@ -349,10 +420,16 @@ flowchart LR
   C --> OUT
   VB --> OUT
 ```
+</details>
 
 ## Trust: security & observability
 
-```mermaid
+![Security controls](docs/diagrams/security-controls.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   ACT["Privileged action"] --> TOK{"Capability token - grants + expiry"}
   TOK -->|valid| GATE{"Approval gate - human-in-the-loop"}
@@ -361,23 +438,35 @@ flowchart LR
   GATE -->|pending| WAIT["Await review"]
   RUN --> AUD["Audit log"]
 ```
+</details>
 
 Every operation is appended to a **SHA-256 hash chain** seeded with `GENESIS`;
 `verify_integrity` re-walks the file and detects any tampering.
 
-```mermaid
+![Audit chain](docs/diagrams/audit-chain.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   E1["event 1"] --> H1["H1 = SHA256 of GENESIS + e1"]
   H1 --> H2["H2 = SHA256 of H1 + e2"]
   H2 --> H3["H3 = SHA256 of H2 + e3"]
   H3 --> VER["verify_integrity - OK"]
 ```
+</details>
 
 Observability is first-class: structured JSON logs, durable JSONL metrics and
 spans, provider analytics, voice latency metrics, and an **execution replay**
 engine that records per-step mission frames and can reload them exactly.
 
-```mermaid
+![Observability](docs/diagrams/observability.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   RUNTIME["Runtime"] --> LOG["JSON logs"]
   RUNTIME --> MET["Metrics - JSONL"]
@@ -385,6 +474,7 @@ flowchart LR
   RUNTIME --> REP["Execution replay - per-mission frames"]
   RUNTIME --> EV["Typed events to Workbench"]
 ```
+</details>
 
 ## The Workbench
 
@@ -393,7 +483,12 @@ server: health, telemetry over WebSocket, missions, agents, chat, a
 non-custodial wallet plus x402 payment-requirement inspector, and an offline
 Web3 security workbench. Values are reported by the backend and never estimated.
 
-```mermaid
+![Workbench data flow](docs/diagrams/workbench-flow.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   subgraph UI["Workbench views"]
     OV["Overview"]
@@ -409,6 +504,7 @@ flowchart LR
   API --> M["missions and agents"]
   API --> SEC["security workbench"]
 ```
+</details>
 
 ## Monorepo layout
 
@@ -438,7 +534,12 @@ flowchart LR
 | `apps/emily-cli` | `emily` command-line interface |
 | `apps/emily-ui` | React + Vite Workbench |
 
-```mermaid
+![Package dependency graph](docs/diagrams/package-graph.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart TB
   CORE["emily-core - ports + types"] --> EVENTS["emily-events"]
   CORE --> CONFIG["emily-config"]
@@ -465,6 +566,7 @@ flowchart TB
   TOOLS --> DESKTOP
   TOOLS --> BROWSER
 ```
+</details>
 
 ## Quick start
 
@@ -539,7 +641,12 @@ floor, strict `mypy`, and Ruff/Black configured at line length 100.
 
 ## Roadmap
 
-```mermaid
+![Roadmap](docs/diagrams/roadmap.svg)
+
+<details>
+<summary>Mermaid source</summary>
+
+```text
 flowchart LR
   M0["M0 platform spine"] --> M1["M1 providers"]
   M1 --> M2["M2 missions"]
@@ -551,6 +658,7 @@ flowchart LR
   M7 --> M8["M8 voice"]
   M8 --> NEXT["Vision follow-on + later milestones"]
 ```
+</details>
 
 Milestones 0-8 are complete. See [`docs/architecture/`](docs/architecture) for
 the full design notes and per-milestone test reports.
