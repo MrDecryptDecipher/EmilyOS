@@ -88,7 +88,7 @@ class InProcessEventBus:
             EventTypes.BUS_STARTED,
             EventTypes.BUS_STOPPED,
         }:
-            raise EventBusError("event bus is not started", details={"event_type": event_type})
+            raise EventBusError(f"event bus not started; cannot publish type={event_type}")
 
         data: dict[str, object] = {
             "event_type": event_type,

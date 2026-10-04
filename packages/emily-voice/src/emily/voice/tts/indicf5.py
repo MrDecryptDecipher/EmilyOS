@@ -10,6 +10,7 @@ import numpy as np
 
 from emily.voice.errors import BackendUnavailableError, ModelUnavailableError, TTSError
 from emily.voice.indicf5_assets import resolve_indicf5_ref
+from emily.voice.speech.bangla_tts import prepare_bengali_for_tts
 from emily.voice.speech.hinglish_tts import prepare_hindi_for_tts
 from emily.voice.models import AudioChunk, SpeechPlan, TTSCapability
 from emily.voice.settings_bridge import resolve_device
@@ -132,16 +133,65 @@ class IndicF5TTS:
     def _torch_device(self) -> str:
         import torch
 
+        # IndicF5 + Whisper + Kokoro exceeds ~4GB cards (e.g. Quadro P2000) and hangs.
         if self.device == "cuda" and torch.cuda.is_available():
+            try:
+                props = torch.cuda.get_device_properties(0)
+                vram_gb = float(props.total_memory) / (1024**3)
+                if vram_gb < 6.0:
+                    return "cpu"
+            except Exception:
+                pass
             return "cuda"
         if self.device == "mps" and getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
             return "mps"
         return "cpu"
 
-    async def load(self, *, language: str = "hi") -> None:
+    def _ensure_vocos(self) -> None:
+        """Prefetch Vocos so first IndicF5 synth does not stall on a silent download."""
+        try:
+            from huggingface_hub import snapshot_download
+
+            snapshot_download(
+                repo_id="charactr/vocos-mel-24khz",
+                local_files_only=False,
+            )
+        except Exception:
+            # Best-effort — IndicF5 may still pull Vocos itself.
+            pass
+
+    async def load(self, *, language: str = "hi", on_status: Any | None = None) -> None:
         if self._model is not None:
             return
-        await asyncio.to_thread(self._load_sync, language)
+
+        def status(msg: str) -> None:
+            if on_status is not None:
+                on_status(msg)
+
+        device = self._torch_device()
+        status(
+            f"Loading IndicF5 on {device} "
+            "(first run may take a few minutes; low-VRAM GPUs use CPU)..."
+        )
+        timeout_s = 300.0 if device == "cpu" else 180.0
+        if self.settings is not None:
+            raw = getattr(self.settings, "voice_indicf5_load_timeout_s", None)
+            if raw is not None:
+                try:
+                    timeout_s = max(60.0, float(raw))
+                except (TypeError, ValueError):
+                    pass
+        try:
+            await asyncio.wait_for(asyncio.to_thread(self._load_sync, language), timeout=timeout_s)
+        except asyncio.TimeoutError as exc:
+            raise BackendUnavailableError(
+                f"IndicF5 load timed out after {timeout_s:.0f}s. "
+                "Run: emily voice models --name indicf5 --download "
+                "and ensure Vocos is cached (charactr/vocos-mel-24khz).",
+                backend=self.name,
+                cause=exc,
+            ) from exc
+        status("IndicF5 ready.")
 
     def _load_sync(self, language: str = "hi") -> None:
         if self._model is not None:
@@ -167,6 +217,7 @@ class IndicF5TTS:
                 cause=exc,
             ) from exc
         _patch_torchaudio_load()
+        self._ensure_vocos()
         model_cls = self._import_model_cls()
         device = self._torch_device()
         # HuggingFace transformers rejects Windows absolute paths as repo ids; load via hub id
@@ -179,6 +230,8 @@ class IndicF5TTS:
             )
             if device != "cpu":
                 self._model = self._model.to(device)
+            else:
+                self._model = self._model.to("cpu")
             if hasattr(self._model, "eval"):
                 self._model.eval()
         except Exception as exc:
@@ -212,7 +265,7 @@ class IndicF5TTS:
         return np.asarray(raw, dtype=np.float32).reshape(-1)
 
     async def synthesize(self, plan: SpeechPlan) -> AudioChunk:
-        await self.load()
+        await self.load(language=(plan.language or "hi").split("-")[0].lower())
         assert self._model is not None
         lang = (plan.language or "hi").split("-")[0].lower()
         audio_path, ref_text = self._resolved_ref(lang)
@@ -221,18 +274,24 @@ class IndicF5TTS:
             plan.text if not plan.segments else " ".join(s.text for s in plan.segments),
             language=lang,
         )
+        text = prepare_bengali_for_tts(text, language=lang)
         # Soft generation speed (does not pitch-shift like playback stretch).
         speed = max(0.78, min(0.90, float(plan.pace or 0.88)))
         # Soften shouty punctuation that pushes IndicF5 into aggressive prosody.
         text = text.replace("!", ".").replace("！", ".")
         text = " ".join(text.split())
+        # CPU synth on Pascal-class machines can exceed 2 minutes for long lines.
+        synth_timeout = 240.0 if self._torch_device() == "cpu" else 120.0
         try:
-            arr = await asyncio.to_thread(
-                self._synthesize_sync,
-                text,
-                audio_path,
-                ref_text,
-                speed,
+            arr = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._synthesize_sync,
+                    text,
+                    audio_path,
+                    ref_text,
+                    speed,
+                ),
+                timeout=synth_timeout,
             )
             if arr.size == 0:
                 raise TTSError("IndicF5 produced empty audio", details={"backend": self.name})
@@ -245,6 +304,12 @@ class IndicF5TTS:
                 channels=1,
                 backend=self.name,
             )
+        except asyncio.TimeoutError as exc:
+            raise TTSError(
+                f"IndicF5 synthesis timed out after {synth_timeout:.0f}s",
+                cause=exc,
+                details={"backend": self.name},
+            ) from exc
         except (BackendUnavailableError, ModelUnavailableError, TTSError):
             raise
         except Exception as exc:

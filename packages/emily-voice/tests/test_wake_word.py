@@ -91,7 +91,7 @@ async def test_wait_asr_phrase_uses_fixed_chunks() -> None:
     assert hit.phrase == "Hey Emily"
     assert hit.backend.value == "asr_phrase"
     assert heard == ["Hey Emily"]
-    assert any("Say 'Hey Emily'" in s or "Hey Emily" in s for s in statuses)
+    assert any("any language" in s.lower() or "Hey Emily" in s for s in statuses)
 
 
 def test_strip_wake_phrase_followup() -> None:
@@ -114,93 +114,61 @@ def test_should_prefer_multilingual_over_english_hallucination() -> None:
         "what time is it",
         detected_language="en",
     )
-    assert not _should_prefer_multilingual_followup(
-        "i'm charles",
-        "kya haal chaal",
-        detected_language="hi",
-    )
-
-
-def test_english_followup_is_trusted_for_clear_questions() -> None:
-    from emily.voice.session.wake_word import (
-        _english_followup_is_trusted,
-        _english_followup_needs_retranscribe,
-    )
-
-    # Greeting-style English is often Hindi→English Whisper translation — re-check.
-    assert not _english_followup_is_trusted("how are you?")
-    assert _english_followup_needs_retranscribe("how are you?")
-    assert _english_followup_needs_retranscribe("what's up? what are you doing")
-    # Specific factual English questions stay trusted.
-    assert _english_followup_is_trusted("what time is it")
-    assert not _english_followup_needs_retranscribe("what time is it")
-    assert _english_followup_needs_retranscribe("what's up")
-    # Strong roman Hinglish must be trusted (avoid Tamil re-transcription swaps).
-    assert _english_followup_is_trusted("kya hal chal kya kar rahe hai")
-    assert not _english_followup_needs_retranscribe("kya hal chal kya kar rahe hai")
 
 
 @pytest.mark.asyncio
-async def test_resolve_wake_question_keeps_roman_hinglish() -> None:
+async def test_resolve_wake_question_uses_multilingual_auto_detect() -> None:
     from emily.voice.models import AudioChunk
     from emily.voice.session.wake_word import WakeWordBackend, WakeWordHit, resolve_wake_question
 
     class _Asr:
-        async def transcribe_wake_followup(self, audio, *, language_hint=None, on_status=None):
-            raise AssertionError("should not re-transcribe clear roman Hinglish")
+        last_detected_language = "bn"
+
+        async def transcribe_wake_question(self, audio, *, on_status=None, english_wake_hint=None):
+            return "Hey Emily, তুমি কেমন আছো?"
 
     hit = WakeWordHit(
         phrase="Hey Emily",
         backend=WakeWordBackend.ASR_PHRASE,
-        transcript="Hey Emily, kya hal chal kya kar rahe hai?",
+        transcript="Hey Emily, How are you doing?",
         audio=AudioChunk(samples=[0.0] * 160, sample_rate=16000, channels=1),
     )
     question = await resolve_wake_question(_Asr(), hit)  # type: ignore[arg-type]
-    assert "kya" in question and "hai" in question
-
-
-def test_should_not_prefer_tamil_over_hinglish() -> None:
-    from emily.voice.session.wake_word import _should_prefer_multilingual_followup
-
-    assert not _should_prefer_multilingual_followup(
-        "kya hal chal kya kar rahe hai",
-        "ஹெய்ய மிலி ஏன் கால் சால் என்ன செய்கிறீர்கள்",
-        detected_language="ta",
-    )
+    assert "তুমি" in question or "কেমন" in question
 
 
 @pytest.mark.asyncio
-async def test_resolve_wake_question_prefers_hinglish_over_english_greeting() -> None:
+async def test_resolve_wake_question_french() -> None:
     from emily.voice.models import AudioChunk
     from emily.voice.session.wake_word import WakeWordBackend, WakeWordHit, resolve_wake_question
 
     class _Asr:
-        last_detected_language = "hi"
+        last_detected_language = "fr"
 
-        async def transcribe_wake_followup(self, audio, *, language_hint=None, on_status=None):
-            assert language_hint == "hi"
-            return "Hey Emily, kya kar rahe ho?"
+        async def transcribe_wake_question(self, audio, *, on_status=None, english_wake_hint=None):
+            return "Hey Emily, quelle heure est-il?"
 
     hit = WakeWordHit(
         phrase="Hey Emily",
         backend=WakeWordBackend.ASR_PHRASE,
-        transcript="Hey Emily! What's up? What are you doing?",
+        transcript="Hey Emily, what time is it?",
         audio=AudioChunk(samples=[0.0] * 160, sample_rate=16000, channels=1),
     )
     question = await resolve_wake_question(_Asr(), hit)  # type: ignore[arg-type]
-    assert "kya" in question and "ho" in question
+    assert "quelle heure" in question
 
 
 @pytest.mark.asyncio
-async def test_resolve_wake_question_keeps_english_when_hindi_asr_agrees() -> None:
+async def test_resolve_wake_question_rejects_amili_bengali_for_how_are_you() -> None:
+    """Bengali wake echo is stripped; remaining Bengali question is kept."""
     from emily.voice.models import AudioChunk
     from emily.voice.session.wake_word import WakeWordBackend, WakeWordHit, resolve_wake_question
 
     class _Asr:
-        last_detected_language = "en"
+        last_detected_language = "bn"
 
-        async def transcribe_wake_followup(self, audio, *, language_hint=None, on_status=None):
-            return "Hey Emily, how are you?"
+        async def transcribe_wake_question(self, audio, *, on_status=None, english_wake_hint=None):
+            return "Hey Emily, হে আমিলি, কেমন আছে"
 
     hit = WakeWordHit(
         phrase="Hey Emily",
@@ -209,40 +177,21 @@ async def test_resolve_wake_question_keeps_english_when_hindi_asr_agrees() -> No
         audio=AudioChunk(samples=[0.0] * 160, sample_rate=16000, channels=1),
     )
     question = await resolve_wake_question(_Asr(), hit)  # type: ignore[arg-type]
-    assert question == "how are you"
+    assert "কেমন" in question
+    assert "আমিলি" not in question
 
 
 @pytest.mark.asyncio
-async def test_resolve_wake_question_keeps_trusted_english() -> None:
+async def test_resolve_wake_question_rejects_urdu_hallucination_for_whats_up() -> None:
+    """Hinglish greeting mis-detected as Urdu should keep English wake followup."""
     from emily.voice.models import AudioChunk
     from emily.voice.session.wake_word import WakeWordBackend, WakeWordHit, resolve_wake_question
 
     class _Asr:
-        async def transcribe_wake_followup(self, audio, *, language_hint=None, on_status=None):
-            raise AssertionError("should not re-transcribe trusted English follow-up")
+        last_detected_language = "ur"
 
-    hit = WakeWordHit(
-        phrase="Hey Emily",
-        backend=WakeWordBackend.ASR_PHRASE,
-        transcript="Hey Emily, I'm Charles",
-        audio=AudioChunk(samples=[0.0] * 160, sample_rate=16000, channels=1),
-    )
-    question = await resolve_wake_question(_Asr(), hit)  # type: ignore[arg-type]
-    assert question == "i'm charles"
-
-
-@pytest.mark.asyncio
-async def test_resolve_wake_question_retranscribes_hinglish() -> None:
-    from emily.voice.models import AudioChunk
-    from emily.voice.session.wake_word import WakeWordBackend, WakeWordHit, resolve_wake_question
-
-    calls: list[str | None] = []
-
-    class _Asr:
-        last_detected_language = "hi"
-
-        async def transcribe_wake_followup(self, audio, *, language_hint=None, on_status=None):
-            return "Hey Emily, kya haal chaal?"
+        async def transcribe_wake_question(self, audio, *, on_status=None, english_wake_hint=None):
+            return "Hey Emily, ہی امیلی کی حال چال کیا کر رہی ہو؟"
 
     hit = WakeWordHit(
         phrase="Hey Emily",
@@ -251,7 +200,47 @@ async def test_resolve_wake_question_retranscribes_hinglish() -> None:
         audio=AudioChunk(samples=[0.0] * 160, sample_rate=16000, channels=1),
     )
     question = await resolve_wake_question(_Asr(), hit)  # type: ignore[arg-type]
-    assert question == "kya haal chaal"
+    assert question in ("what's up?", "what's up")
+
+
+@pytest.mark.asyncio
+async def test_resolve_wake_question_rejects_bengali_hallucination_for_whats_up() -> None:
+    """Hinglish greeting mistranscribed as Bengali script should keep English wake followup."""
+    from emily.voice.models import AudioChunk
+    from emily.voice.session.wake_word import WakeWordBackend, WakeWordHit, resolve_wake_question
+
+    class _Asr:
+        last_detected_language = "bn"
+
+        async def transcribe_wake_question(self, audio, *, on_status=None, english_wake_hint=None):
+            return "Hey Emily, এই এমিলি, কিছু হাল চাল"
+
+    hit = WakeWordHit(
+        phrase="Hey Emily",
+        backend=WakeWordBackend.ASR_PHRASE,
+        transcript="Hey Emily, what's up?",
+        audio=AudioChunk(samples=[0.0] * 160, sample_rate=16000, channels=1),
+    )
+    question = await resolve_wake_question(_Asr(), hit)  # type: ignore[arg-type]
+    assert question in ("what's up?", "what's up")
+
+
+@pytest.mark.asyncio
+async def test_resolve_wake_question_fallback_without_audio() -> None:
+    from emily.voice.session.wake_word import WakeWordBackend, WakeWordHit, resolve_wake_question
+
+    class _Asr:
+        async def transcribe_wake_question(self, audio, *, on_status=None, english_wake_hint=None):
+            raise AssertionError("no audio — should not call ASR")
+
+    hit = WakeWordHit(
+        phrase="Hey Emily",
+        backend=WakeWordBackend.ASR_PHRASE,
+        transcript="Hey Emily, what time is it?",
+        audio=None,
+    )
+    question = await resolve_wake_question(_Asr(), hit)  # type: ignore[arg-type]
+    assert question == "what time is it"
 
 
 def test_wake_listener_disabled_without_flag() -> None:

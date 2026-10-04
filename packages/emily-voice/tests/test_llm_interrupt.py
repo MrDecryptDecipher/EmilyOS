@@ -23,9 +23,10 @@ class SentenceRouter:
     """Yields full sentences slowly so TTS can interrupt before the next."""
 
     async def stream(self, messages):
-        for piece in ("First sentence here. ", "Second sentence follows."):
-            await asyncio.sleep(0.15)
-            yield piece
+        await asyncio.sleep(0.05)
+        yield "First sentence here. "
+        await asyncio.sleep(0.5)
+        yield "Second sentence follows."
 
 
 @pytest.mark.asyncio
@@ -60,6 +61,7 @@ async def test_converse_streaming_stops_after_barge_in() -> None:
         settings=SimpleNamespace(
             voice_streaming=True,
             voice_barge_in=True,
+            voice_tts_stream_sentences=True,
             voice_adaptive_pacing=False,
             voice_emotion=False,
             voice_prefer_energy_vad=True,

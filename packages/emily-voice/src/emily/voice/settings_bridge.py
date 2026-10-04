@@ -41,6 +41,29 @@ def enabled_backends(
     return out  # type: ignore[return-value]
 
 
+def effective_engines_for_language(
+    settings: Any | None,
+    engines: Mapping[str, TTSEngine],
+    all_engines: Mapping[str, TTSEngine],
+    language: str,
+) -> dict[str, TTSEngine]:
+    """
+    Engines usable for a given reply language.
+
+    IndicF5 is included for Bengali/Tamil/etc. even when ``tts_enable_indicf5=false``,
+    because Kokoro cannot speak those scripts (would sound like gibberish).
+    """
+    from emily.voice.tts.registry import language_requires_indicf5
+
+    out = dict(engines)
+    base = (language or "en").split("-")[0].lower()
+    if language_requires_indicf5(base) and "indicf5" not in out:
+        indic = all_engines.get("indicf5")
+        if indic is not None and indic.available():
+            out["indicf5"] = indic
+    return out
+
+
 def resolve_device(settings: Any | None) -> str:
     """Map tts_device (auto|cpu|cuda|mps) onto a concrete torch device string."""
     prefer = str(voice_flag(settings, "tts_device", "auto") or "auto")

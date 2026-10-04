@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <title>Emily OS — The operating system that thinks.</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/music/audio-data.js"></script>
+    <style>
+      @font-face {
+        font-family: "DM Sans";
+        font-style: normal;
+        font-weight: 400 700;
+        font-display: block;
+        src: url("assets/fonts/DMSans-var.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "DM Mono";
+        font-style: normal;
+        font-weight: 400;
+        font-display: block;
+        src: url("assets/fonts/DMMono-400.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "DM Mono";
+        font-style: normal;
+        font-weight: 500 700;
+        font-display: block;
+        src: url("assets/fonts/DMMono-500.woff2") format("woff2");
+      }
+
+      :root {
+        --field: #0b0d10;
+        --surface: #171b1e;
+        --surface2: #1d2226;
+        --text: #e8edf2;
+        --text2: #9aa3a9;
+        --text3: #8f979d;
+        --accent: #9fe5b8;
+        --cyan: #06b6d4;
+        --green: #10b981;
+        --mono: "DM Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+        --sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--field);
+        color: var(--text);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background:
+          radial-gradient(1200px 800px at 70% 12%, rgba(16, 185, 129, 0.08), transparent 62%),
+          radial-gradient(1000px 760px at 14% 90%, rgba(6, 182, 212, 0.06), transparent 60%),
+          var(--field);
+      }
+      #bg {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.024) 1px, transparent 1px);
+        background-size: 48px 48px, 48px 48px;
+        -webkit-mask-image: radial-gradient(1500px 950px at 50% 45%, #000 42%, transparent 94%);
+        mask-image: radial-gradient(1500px 950px at 50% 45%, #000 42%, transparent 94%);
+      }
+      #vignette {
+        position: absolute;
+        inset: 0;
+        z-index: 55;
+        pointer-events: none;
+        background: radial-gradient(120% 100% at 50% 45%, transparent 45%, rgba(0, 0, 0, 0.55) 100%);
+      }
+      #scan {
+        position: absolute;
+        inset: 0;
+        z-index: 56;
+        pointer-events: none;
+        opacity: 0.5;
+        background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px);
+      }
+      #fadeout {
+        position: absolute;
+        inset: 0;
+        z-index: 60;
+        background: #000;
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* global HUD chrome */
+      #hud {
+        position: absolute;
+        inset: 40px;
+        z-index: 50;
+        pointer-events: none;
+        opacity: 0;
+      }
+      #hud .corner {
+        position: absolute;
+        width: 30px;
+        height: 30px;
+        border: 2px solid rgba(159, 229, 184, 0.5);
+      }
+      #hud .tl { top: 0; left: 0; border-right: 0; border-bottom: 0; }
+      #hud .tr { top: 0; right: 0; border-left: 0; border-bottom: 0; }
+      #hud .bl { bottom: 0; left: 0; border-right: 0; border-top: 0; }
+      #hud .br { bottom: 0; right: 0; border-left: 0; border-top: 0; }
+      #hud .hud-label {
+        position: absolute;
+        font-family: var(--mono);
+        font-size: 13px;
+        letter-spacing: 0.28em;
+        color: rgba(159, 229, 184, 0.72);
+      }
+      #hud .hud-live { top: -6px; right: 44px; }
+      #hud .hud-brand { top: -6px; left: 44px; }
+      #hud .hud-sig { bottom: -6px; left: 44px; color: rgba(154, 163, 169, 0.8); }
+      #hud .live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ff6b6b;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      .clip.scene {
+        overflow: hidden;
+      }
+      .scene-inner {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 0 100px;
+        gap: 30px;
+      }
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 15px;
+        letter-spacing: 0.42em;
+        color: var(--accent);
+        text-transform: uppercase;
+        text-indent: 0.42em;
+      }
+      .headline {
+        font-size: 66px;
+        font-weight: 700;
+        letter-spacing: -0.035em;
+        line-height: 1.08;
+        color: var(--text);
+      }
+      .headline em {
+        color: var(--accent);
+        font-style: normal;
+      }
+      .sub {
+        font-size: 27px;
+        font-weight: 500;
+        color: var(--text2);
+        letter-spacing: -0.01em;
+      }
+
+      /* ---------------- Scene 1 — the problem ---------------- */
+      .tabstrip {
+        position: absolute;
+        top: 92px;
+        left: 0;
+        right: 0;
+        display: flex;
+        gap: 9px;
+        justify-content: center;
+        opacity: 0.6;
+      }
+      .tab {
+        width: 112px;
+        height: 32px;
+        border-radius: 9px 9px 0 0;
+        background: rgba(255, 255, 255, 0.045);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      #s1 .scene-inner {
+        gap: 22px;
+      }
+      .pl {
+        font-size: 58px;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+        color: #c4ccd1;
+      }
+      .pl.dim {
+        color: #8f979d;
+        font-weight: 500;
+      }
+      #s1-cursor {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        z-index: 5;
+      }
+      #s1-cursor::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        border-left: 9px solid var(--accent);
+        border-bottom: 14px solid transparent;
+        border-right: 6px solid transparent;
+        filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+      }
+
+      /* ---------------- presence orb ---------------- */
+      .orb-wrap {
+        position: relative;
+        width: 320px;
+        height: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .orb-glow {
+        position: absolute;
+        width: 940px;
+        height: 940px;
+        top: 50%;
+        left: 50%;
+        margin-top: -470px;
+        margin-left: -470px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(16, 185, 129, 0.3), rgba(6, 182, 212, 0.1) 46%, transparent 70%);
+        filter: blur(50px);
+        opacity: 0.2;
+        pointer-events: none;
+      }
+      .orb {
+        position: absolute;
+        inset: 30px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle at 36% 32%,
+          rgba(233, 255, 245, 0.95),
+          rgba(159, 229, 184, 0.72) 26%,
+          rgba(6, 182, 212, 0.46) 52%,
+          rgba(6, 182, 212, 0.1) 72%,
+          transparent 78%
+        );
+        box-shadow: 0 0 100px rgba(16, 185, 129, 0.5), inset 0 0 70px rgba(6, 182, 212, 0.4);
+      }
+      .orb-sheen {
+        position: absolute;
+        inset: 40px;
+        border-radius: 50%;
+        background: conic-gradient(
+          from 0deg,
+          transparent 0deg,
+          rgba(255, 255, 255, 0.24) 40deg,
+          transparent 96deg,
+          transparent 212deg,
+          rgba(159, 229, 184, 0.2) 268deg,
+          transparent 322deg
+        );
+        mix-blend-mode: screen;
+        filter: blur(7px);
+      }
+      .orb-ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 1px solid rgba(159, 229, 184, 0.28);
+      }
+      .orb-ring.r2 {
+        inset: -26px;
+        border-color: rgba(6, 182, 212, 0.22);
+      }
+      .orb-ring.r3 {
+        inset: -52px;
+        border-color: rgba(159, 229, 184, 0.12);
+      }
+      .orbit {
+        position: absolute;
+        inset: 0;
+      }
+      .orbit .dot {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 10px rgba(159, 229, 184, 0.9);
+        top: -4px;
+        left: calc(50% - 4px);
+      }
+
+      /* ---------------- pipeline (missions) ---------------- */
+      .pipeline {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .pnode {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 18px 20px 16px;
+        min-width: 168px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(25, 29, 32, 0.94), rgba(14, 16, 18, 0.94));
+      }
+      .pnode .pn-name {
+        font-family: var(--mono);
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        color: var(--text);
+      }
+      .pnode .pn-sub {
+        font-size: 13px;
+        color: var(--text2);
+      }
+      .pnode .pn-bar {
+        display: block;
+        width: 100%;
+        height: 3px;
+        border-radius: 2px;
+        margin-top: 4px;
+        background: linear-gradient(90deg, var(--accent), rgba(6, 182, 212, 0.6));
+        transform-origin: left center;
+      }
+      .plink {
+        display: inline-block;
+        width: 34px;
+        height: 2px;
+        border-radius: 2px;
+        background: rgba(159, 229, 184, 0.5);
+        transform-origin: left center;
+      }
+      .agent-row {
+        display: flex;
+        gap: 12px;
+      }
+      .agent-chip {
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        color: var(--accent);
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(159, 229, 184, 0.35);
+        background: rgba(159, 229, 184, 0.08);
+      }
+
+      /* ---------------- action mocks ---------------- */
+      .mocks {
+        display: flex;
+        gap: 24px;
+        align-items: stretch;
+      }
+      .mock {
+        position: relative;
+        width: 540px;
+        height: 306px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 12px;
+        background: #0e1012;
+        overflow: hidden;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+      }
+      .mock-bar {
+        height: 36px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        background: #14181b;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .mock-bar i {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.16);
+      }
+      .mock-bar .mtitle {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text3);
+        margin-left: 6px;
+      }
+      .mock-body {
+        padding: 18px;
+        position: relative;
+      }
+      .mock-row {
+        height: 14px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.06);
+        margin-bottom: 12px;
+      }
+      .mock-row.hl {
+        background: rgba(159, 229, 184, 0.16);
+        border: 1px solid rgba(159, 229, 184, 0.35);
+      }
+      .mock-btn {
+        position: absolute;
+        right: 30px;
+        bottom: 30px;
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 600;
+        color: #0f1113;
+        background: var(--accent);
+        border: none;
+        border-radius: 7px;
+        padding: 10px 16px;
+      }
+      .cursor {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        z-index: 5;
+      }
+      .cursor::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        border-left: 9px solid var(--accent);
+        border-bottom: 14px solid transparent;
+        border-right: 6px solid transparent;
+        filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+      }
+      .click-ripple {
+        position: absolute;
+        right: 46px;
+        bottom: 48px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2px solid var(--accent);
+        opacity: 0;
+        transform-origin: center;
+      }
+      .url {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--text2);
+        margin-left: 6px;
+      }
+      .skeleton span {
+        display: block;
+        height: 12px;
+        border-radius: 4px;
+        margin-bottom: 10px;
+        background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+        background-size: 300px 100%;
+      }
+
+      /* ---------------- voice waveform + langs ---------------- */
+      .wave {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        height: 160px;
+      }
+      .wave .bar {
+        width: 6px;
+        height: 100%;
+        border-radius: 4px;
+        background: linear-gradient(180deg, var(--accent), rgba(6, 182, 212, 0.5));
+        transform: scaleY(0.08);
+        transform-origin: center;
+      }
+      .langs {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+      }
+      .langchip {
+        font-family: var(--mono);
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        padding: 9px 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(159, 229, 184, 0.35);
+        background: rgba(159, 229, 184, 0.08);
+        color: var(--accent);
+      }
+      .memgraph {
+        position: relative;
+        width: 680px;
+        height: 300px;
+      }
+      .memgraph svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .memgraph svg line {
+        stroke: rgba(159, 229, 184, 0.4);
+        stroke-width: 1.5;
+      }
+      .mnode {
+        position: absolute;
+        font-family: var(--mono);
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+        padding: 8px 14px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 8px;
+        background: #14181b;
+      }
+      .mnode.core {
+        color: var(--accent);
+        border-color: rgba(159, 229, 184, 0.55);
+        background: rgba(159, 229, 184, 0.08);
+        box-shadow: 0 0 24px rgba(159, 229, 184, 0.25);
+      }
+
+      /* ---------------- cockpit ---------------- */
+      .cockpit-glow {
+        position: absolute;
+        width: 1500px;
+        height: 900px;
+        top: 50%;
+        left: 50%;
+        margin-top: -450px;
+        margin-left: -750px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(16, 185, 129, 0.22), rgba(6, 182, 212, 0.08) 45%, transparent 70%);
+        filter: blur(60px);
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      .ck-window {
+        width: 1400px;
+        height: 730px;
+        display: flex;
+        background: #101214;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 50px 140px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        text-align: left;
+      }
+      .ck-side {
+        width: 240px;
+        flex-shrink: 0;
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 24px 16px;
+        display: flex;
+        flex-direction: column;
+        background: #0f1113;
+      }
+      .ck-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        font-size: 15px;
+        color: var(--text);
+      }
+      .ck-mark {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        border-radius: 8px;
+        font-weight: 700;
+      }
+      .ck-brand small {
+        display: block;
+        color: #98a2a8;
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.16em;
+        margin-top: 4px;
+        font-weight: 500;
+      }
+      .ck-nav {
+        margin-top: 34px;
+        display: grid;
+        gap: 6px;
+      }
+      .ck-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 12px;
+        border-radius: 8px;
+        font-size: 15px;
+        color: #98a2a8;
+      }
+      .ck-item .ic {
+        width: 22px;
+        color: #7d858b;
+      }
+      .ck-item.on {
+        color: var(--text);
+        background: var(--surface2);
+      }
+      .ck-item.on .ic {
+        color: var(--accent);
+      }
+      .ck-foot {
+        margin-top: auto;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text3);
+        line-height: 2;
+      }
+      .ck-foot .dot {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        margin-right: 7px;
+      }
+      .ck-main {
+        flex: 1;
+        padding: 26px 34px;
+        display: flex;
+        flex-direction: column;
+      }
+      .ck-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+      .ck-top h1 {
+        font-size: 26px;
+        font-weight: 600;
+        margin-top: 5px;
+      }
+      .ck-conn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--accent);
+        padding-top: 8px;
+      }
+      .pulse {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 12px var(--accent);
+      }
+      .ck-hero {
+        margin-top: 20px;
+      }
+      .ck-hero h2 {
+        font-size: 38px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+        margin-top: 6px;
+      }
+      .ck-hero h2 em {
+        color: var(--accent);
+        font-style: normal;
+      }
+      .ck-charts {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .ck-panel {
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 10px;
+        background: #14181b;
+        padding: 14px 16px;
+      }
+      .ck-panel-head {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        color: #98a2a8;
+        margin-bottom: 10px;
+      }
+      .ck-panel-head b {
+        color: var(--accent);
+      }
+      .spark {
+        display: block;
+        width: 100%;
+        height: 118px;
+      }
+      .spark polyline {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2.5;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        filter: drop-shadow(0 0 6px rgba(159, 229, 184, 0.5));
+      }
+      .bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        height: 118px;
+      }
+      .bars .b {
+        flex: 1;
+        border-radius: 4px 4px 0 0;
+        background: linear-gradient(180deg, var(--accent), rgba(6, 182, 212, 0.45));
+        transform-origin: bottom center;
+      }
+      .ck-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-top: 14px;
+      }
+      .ck-metric {
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 9px;
+        background: #14181b;
+        padding: 12px 14px;
+      }
+      .ck-metric span {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: #98a2a8;
+        text-transform: uppercase;
+      }
+      .ck-metric strong {
+        display: block;
+        margin-top: 7px;
+        font-family: var(--mono);
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+      .ck-feed {
+        margin-top: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .ck-feed-line {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--text2);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .ck-feed-line i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .ck-feed-line b {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .hud-float {
+        position: absolute;
+        z-index: 6;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 12px;
+        background: rgba(13, 16, 18, 0.9);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+        overflow: hidden;
+      }
+      #hud-capture {
+        left: 120px;
+        bottom: 96px;
+        width: 300px;
+      }
+      #hud-capture .hc-bar {
+        height: 26px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px;
+        background: #14181b;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        color: var(--accent);
+      }
+      #hud-capture img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      #hud-status {
+        right: 120px;
+        bottom: 96px;
+        width: 250px;
+        padding: 14px 16px;
+      }
+      #hud-status .hs-title {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        color: #98a2a8;
+        margin-bottom: 10px;
+      }
+      .hs-row {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--text2);
+        padding: 4px 0;
+      }
+      .hs-row b {
+        color: var(--accent);
+      }
+      .dock {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+      }
+      .dock-chip {
+        padding: 10px 17px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(13, 16, 28, 0.72);
+        color: #dfe5e9;
+        font-size: 15px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .dock-chip.song {
+        color: var(--accent);
+        border-color: rgba(159, 229, 184, 0.38);
+        background: rgba(159, 229, 184, 0.08);
+      }
+
+      /* ---------------- trust chain ---------------- */
+      .chain {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .hash {
+        font-family: var(--mono);
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--text);
+        padding: 14px 20px;
+        border-radius: 9px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #14181b;
+      }
+      .hash.tip {
+        border-color: rgba(159, 229, 184, 0.55);
+        color: var(--accent);
+      }
+      .hlink {
+        width: 28px;
+        height: 2px;
+        background: rgba(159, 229, 184, 0.5);
+        transform-origin: left center;
+      }
+      .verify {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: var(--mono);
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .verify .vbadge {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 2px solid var(--accent);
+      }
+
+      /* ---------------- outro ---------------- */
+      #s8-glow {
+        position: absolute;
+        width: 980px;
+        height: 520px;
+        top: 50%;
+        left: 50%;
+        margin-top: -260px;
+        margin-left: -490px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(16, 185, 129, 0.45), rgba(6, 182, 212, 0.14) 45%, transparent 68%);
+        filter: blur(40px);
+        opacity: 0.26;
+        pointer-events: none;
+      }
+      #s8-mark {
+        position: relative;
+        font-size: 188px;
+        font-weight: 700;
+        letter-spacing: -0.055em;
+        line-height: 1;
+        color: var(--text);
+      }
+      #s8-mark em {
+        color: var(--accent);
+        font-style: normal;
+      }
+      #s8-tag {
+        position: relative;
+        font-size: 40px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: #cbd4d8;
+      }
+      .sparkles {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .sparkles .sp {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="35" data-fps="30" data-width="1920" data-height="1080">
+      <div id="bg"></div>
+
+      <!-- ============ Scene 1 — the problem (0.0–4.53) ============ -->
+      <section id="s1" class="clip scene" data-start="0" data-duration="4.53" data-track-index="1">
+        <div class="tabstrip" id="tabstrip">
+          <span class="tab"></span><span class="tab"></span><span class="tab"></span><span class="tab"></span><span class="tab"></span><span class="tab"></span>
+          <span class="tab"></span><span class="tab"></span><span class="tab"></span><span class="tab"></span><span class="tab"></span><span class="tab"></span>
+          <span class="tab"></span><span class="tab"></span><span class="tab"></span><span class="tab"></span>
+        </div>
+        <span id="s1-cursor"></span>
+        <div class="scene-inner">
+          <div class="pl" id="s1-l1">Your work lives in fifty tabs.</div>
+          <div class="pl dim" id="s1-l2">Fifty apps. Zero memory.</div>
+          <div class="pl" id="s1-l3">And the AI can only talk.</div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 2 — what it is (4.53–8.52) ============ -->
+      <section id="s2" class="clip scene" data-start="4.53" data-duration="3.99" data-track-index="1">
+        <div class="scene-inner">
+          <div class="orb-glow" id="s2-glow"></div>
+          <div class="orb-wrap">
+            <div class="orb-ring r3"></div>
+            <div class="orb-ring r2"></div>
+            <div class="orb-ring"></div>
+            <div class="orbit" id="orbit1"><span class="dot"></span></div>
+            <div class="orbit" id="orbit2"><span class="dot"></span></div>
+            <div class="orb"></div>
+            <div class="orb-sheen" id="s2-sheen"></div>
+          </div>
+          <div class="headline" id="s2-l1">So we built <em>Emily OS</em>.</div>
+          <div class="sub" id="s2-l2">An AI-native desktop operating platform.</div>
+          <div class="sub" id="s2-l3">It reasons. It acts. It stays observable.</div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 3 — how / missions (8.52–13.51) ============ -->
+      <section id="s3" class="clip scene" data-start="8.52" data-duration="4.99" data-track-index="1">
+        <div class="scene-inner">
+          <div class="eyebrow" id="s3-eyebrow">How · 01</div>
+          <div class="headline" id="s3-title">Missions, not prompts.</div>
+          <div class="pipeline">
+            <div class="pnode"><span class="pn-name">PLAN</span><span class="pn-sub">decompose</span><span class="pn-bar"></span></div>
+            <span class="plink"></span>
+            <div class="pnode"><span class="pn-name">EXECUTE</span><span class="pn-sub">agents</span><span class="pn-bar"></span></div>
+            <span class="plink"></span>
+            <div class="pnode"><span class="pn-name">VERIFY</span><span class="pn-sub">critique</span><span class="pn-bar"></span></div>
+            <span class="plink"></span>
+            <div class="pnode"><span class="pn-name">REFLECT</span><span class="pn-sub">retry</span><span class="pn-bar"></span></div>
+            <span class="plink"></span>
+            <div class="pnode"><span class="pn-name">FINALIZE</span><span class="pn-sub">durable</span><span class="pn-bar"></span></div>
+          </div>
+          <div class="agent-row">
+            <span class="agent-chip">researcher</span>
+            <span class="agent-chip">coder</span>
+            <span class="agent-chip">verifier</span>
+            <span class="agent-chip">critic</span>
+          </div>
+          <div class="sub" id="s3-cap">A supervised team of agents plans, executes, verifies, and retries.</div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 4 — how / it acts (13.51–18.52) ============ -->
+      <section id="s4" class="clip scene" data-start="13.51" data-duration="5.01" data-track-index="1">
+        <div class="scene-inner">
+          <div class="eyebrow" id="s4-eyebrow">How · 02</div>
+          <div class="headline" id="s4-title">It uses your computer.</div>
+          <div class="mocks">
+            <div class="mock" id="mock-desktop">
+              <div class="mock-bar"><i></i><i></i><i></i><span class="mtitle">File Explorer</span></div>
+              <div class="mock-body">
+                <div class="mock-row"></div>
+                <div class="mock-row"></div>
+                <div class="mock-row hl"></div>
+                <div class="mock-row"></div>
+                <button class="mock-btn">Run task</button>
+                <span class="cursor" id="cursor1"></span>
+                <span class="click-ripple" id="ripple1"></span>
+              </div>
+            </div>
+            <div class="mock" id="mock-browser">
+              <div class="mock-bar"><i></i><i></i><i></i><span class="url" id="url">https://</span></div>
+              <div class="mock-body">
+                <div class="skeleton" id="skeleton">
+                  <span style="width:70%"></span>
+                  <span style="width:92%"></span>
+                  <span style="width:60%"></span>
+                  <span style="width:80%"></span>
+                  <span style="width:45%"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sub" id="s4-cap">Native Windows control. A real browser. On-device sight.</div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 5 — how / voice + memory (18.52–23.02) ============ -->
+      <section id="s5" class="clip scene" data-start="18.52" data-duration="4.5" data-track-index="1">
+        <div class="scene-inner">
+          <div class="eyebrow" id="s5-eyebrow">How · 03</div>
+          <div class="headline" id="s5-t1">It hears you — in 23 languages.</div>
+          <div class="wave" id="s5-wave">
+            <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+            <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+            <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+            <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+            <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          </div>
+          <div class="langs">
+            <span class="langchip">EN</span><span class="langchip">বাংলা</span><span class="langchip">हिन्दी</span><span class="langchip">ES</span>
+            <span class="langchip">FR</span><span class="langchip">中文</span><span class="langchip">日本語</span><span class="langchip">+23</span>
+          </div>
+          <div class="headline" id="s5-t2" style="font-size:54px">And it remembers.</div>
+          <div class="memgraph" id="s5-mem">
+            <svg viewBox="0 0 680 300" preserveAspectRatio="none">
+              <line x1="340" y1="150" x2="150" y2="66" stroke-dasharray="300" />
+              <line x1="340" y1="150" x2="540" y2="66" stroke-dasharray="300" />
+              <line x1="340" y1="150" x2="120" y2="232" stroke-dasharray="300" />
+              <line x1="340" y1="150" x2="560" y2="232" stroke-dasharray="300" />
+              <line x1="340" y1="150" x2="340" y2="36" stroke-dasharray="300" />
+            </svg>
+            <span class="mnode core" style="left:258px;top:122px">WORLD MODEL</span>
+            <span class="mnode" style="left:78px;top:42px">people</span>
+            <span class="mnode" style="left:486px;top:42px">projects</span>
+            <span class="mnode" style="left:36px;top:208px">facts</span>
+            <span class="mnode" style="left:500px;top:208px">preferences</span>
+            <span class="mnode" style="left:290px;top:6px">history</span>
+          </div>
+          <div class="sub" id="s5-cap">16 kinds of memory. One continuous world model.</div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 6 — the cockpit (23.02–28.01) ============ -->
+      <section id="s6" class="clip scene" data-start="23.02" data-duration="4.99" data-track-index="1">
+        <div class="cockpit-glow" id="s6-glow"></div>
+        <div class="scene-inner">
+          <div class="eyebrow" id="s6-eyebrow">The Cockpit</div>
+          <div class="ck-window" id="ck-window">
+            <div class="ck-side">
+              <div class="ck-brand"><span class="ck-mark">E</span><span>EMILY <small>WORKBENCH</small></span></div>
+              <div class="ck-nav">
+                <div class="ck-item on"><span class="ic">◈</span>Overview</div>
+                <div class="ck-item"><span class="ic">◌</span>Missions</div>
+                <div class="ck-item"><span class="ic">◉</span>Agents</div>
+                <div class="ck-item"><span class="ic">◇</span>Chat</div>
+                <div class="ck-item"><span class="ic">▣</span>Wallet</div>
+                <div class="ck-item"><span class="ic">◇</span>Security</div>
+              </div>
+              <div class="ck-foot">LOCAL CONTROL PLANE<br><span class="dot"></span>Backend connected</div>
+            </div>
+            <div class="ck-main">
+              <div class="ck-top">
+                <div>
+                  <p class="eyebrow">EMILY / CONTROL PLANE</p>
+                  <h1>Overview</h1>
+                </div>
+                <div class="ck-conn"><span class="pulse"></span>Connected</div>
+              </div>
+              <div class="ck-hero">
+                <p class="eyebrow">SYSTEM SNAPSHOT</p>
+                <h2>Quietly capable. <em>Always observable.</em></h2>
+              </div>
+              <div class="ck-charts">
+                <div class="ck-panel">
+                  <div class="ck-panel-head"><span>TELEMETRY · /ws/telemetry</span><b>● LIVE</b></div>
+                  <svg class="spark" viewBox="0 0 600 120" preserveAspectRatio="none">
+                    <polyline id="sparkline" points="0,96 45,82 90,88 135,62 180,72 225,46 270,58 315,30 360,44 405,22 450,36 495,16 540,26 585,12 600,20" />
+                  </svg>
+                </div>
+                <div class="ck-panel">
+                  <div class="ck-panel-head"><span>LOAD</span><b>8 SUBSYSTEMS</b></div>
+                  <div class="bars">
+                    <span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="ck-metrics">
+                <div class="ck-metric"><span>CPU LOAD</span><strong id="ck-cpu">0%</strong></div>
+                <div class="ck-metric"><span>MEMORY</span><strong id="ck-mem">0 MB</strong></div>
+                <div class="ck-metric"><span>ACTIVE AGENTS</span><strong id="ck-agents">0</strong></div>
+                <div class="ck-metric"><span>MISSIONS</span><strong id="ck-miss">0</strong></div>
+              </div>
+              <div class="ck-feed">
+                <div class="ck-feed-line"><i></i><b>mission.created</b> research-brief.2026</div>
+                <div class="ck-feed-line"><i></i><b>agent.completed</b> researcher → verified</div>
+                <div class="ck-feed-line"><i></i><b>browser.goto</b> dashboard · grounded 42 nodes</div>
+              </div>
+            </div>
+          </div>
+          <div class="dock">
+            <div class="dock-chip">Screen Vision</div>
+            <div class="dock-chip">Code Review</div>
+            <div class="dock-chip">AST Index</div>
+            <div class="dock-chip">Look Around</div>
+            <div class="dock-chip">Portfolio</div>
+            <div class="dock-chip song">Identify Song</div>
+          </div>
+        </div>
+        <div class="hud-float" id="hud-capture">
+          <div class="hc-bar"><span class="live-dot" style="background:#9fe5b8"></span>SESSION · LIVE</div>
+          <img src="assets/images/ui_screenshot.png" alt="Emily runtime" />
+        </div>
+        <div class="hud-float" id="hud-status">
+          <div class="hs-title">RUNTIME</div>
+          <div class="hs-row"><span>kernel</span><b>running</b></div>
+          <div class="hs-row"><span>providers</span><b>2 online</b></div>
+          <div class="hs-row"><span>desktop</span><b>native</b></div>
+          <div class="hs-row"><span>audit</span><b>verified</b></div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 7 — why it holds up (28.01–32.02) ============ -->
+      <section id="s7" class="clip scene" data-start="28.01" data-duration="4.01" data-track-index="1">
+        <div class="scene-inner">
+          <div class="eyebrow" id="s7-eyebrow">Why it holds up</div>
+          <div class="headline" id="s7-title">Local-first. Hash-chained. Human-approved.</div>
+          <div class="chain">
+            <span class="hash" id="h1">7c1a…</span>
+            <span class="hlink"></span>
+            <span class="hash" id="h2">2e9b…</span>
+            <span class="hlink"></span>
+            <span class="hash" id="h3">a41d…</span>
+            <span class="hlink"></span>
+            <span class="hash tip" id="h4">f80c…</span>
+          </div>
+          <div class="verify" id="s7-verify"><span class="vbadge">✓</span>INTEGRITY VERIFIED</div>
+          <div class="sub" id="s7-cap">Every action lands on a tamper-evident audit chain.</div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 8 — Emily OS (32.02–35.0) ============ -->
+      <section id="s8" class="clip scene" data-start="32.02" data-duration="2.98" data-track-index="1">
+        <div class="sparkles" id="s8-sparkles"></div>
+        <div class="scene-inner">
+          <div id="s8-glow"></div>
+          <div id="s8-mark">EMILY <em>OS</em></div>
+          <div id="s8-tag">Quietly capable. Always observable.</div>
+        </div>
+      </section>
+
+      <div id="hud">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <span class="hud-label hud-brand">EMILY OS · LOCAL RUNTIME</span>
+        <span class="hud-label hud-live"><span class="live-dot"></span>LIVE</span>
+        <span class="hud-label hud-sig">BUILD 0.1.0 · WINDOWS 11</span>
+      </div>
+      <div id="scan"></div>
+      <div id="vignette"></div>
+      <div id="fadeout"></div>
+
+      <!-- ============ Audio ============ -->
+      <audio id="bg-music" data-start="0" data-duration="35" data-track-index="10" data-volume="0.4" data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:0},{&quot;t&quot;:2.4,&quot;v&quot;:0.3},{&quot;t&quot;:14,&quot;v&quot;:0.34},{&quot;t&quot;:16.02,&quot;v&quot;:0.48},{&quot;t&quot;:18.5,&quot;v&quot;:0.42},{&quot;t&quot;:31.5,&quot;v&quot;:0.44},{&quot;t&quot;:32.5,&quot;v&quot;:0.5},{&quot;t&quot;:34.2,&quot;v&quot;:0.22},{&quot;t&quot;:35,&quot;v&quot;:0}]}]}" src="assets/music/happy-beats-business-moves-vol-1-by-ende-dot-app.mp3"></audio>
+
+      <audio id="a01" data-start="0.6" data-duration="0.2" data-track-index="20" data-volume="0.42" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="a02" data-start="2.0" data-duration="0.2" data-track-index="21" data-volume="0.42" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="a03" data-start="3.52" data-duration="0.2" data-track-index="22" data-volume="0.5" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="a04" data-start="5.03" data-duration="0.3" data-track-index="23" data-volume="0.55" src="assets/sfx/impact/impactSoft_medium_002.ogg"></audio>
+      <audio id="a05" data-start="6.03" data-duration="0.2" data-track-index="24" data-volume="0.4" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="a06" data-start="7.52" data-duration="0.2" data-track-index="25" data-volume="0.4" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="a07" data-start="9.02" data-duration="0.25" data-track-index="26" data-volume="0.45" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="a08" data-start="10.02" data-duration="0.12" data-track-index="27" data-volume="0.5" src="assets/sfx/interface/click_003.ogg"></audio>
+      <audio id="a09" data-start="10.52" data-duration="0.12" data-track-index="28" data-volume="0.5" src="assets/sfx/interface/click_003.ogg"></audio>
+      <audio id="a10" data-start="11.02" data-duration="0.12" data-track-index="29" data-volume="0.5" src="assets/sfx/interface/click_003.ogg"></audio>
+      <audio id="a11" data-start="11.52" data-duration="0.12" data-track-index="30" data-volume="0.5" src="assets/sfx/interface/click_003.ogg"></audio>
+      <audio id="a12" data-start="12.02" data-duration="0.12" data-track-index="31" data-volume="0.55" src="assets/sfx/interface/select_008.ogg"></audio>
+      <audio id="a13" data-start="14.02" data-duration="0.25" data-track-index="32" data-volume="0.45" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="a14" data-start="15.02" data-duration="0.2" data-track-index="33" data-volume="0.5" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="a15" data-start="16.02" data-duration="0.8" data-track-index="34" data-volume="0.95" src="assets/sfx/impact/impactBell_heavy_003.ogg"></audio>
+      <audio id="a16" data-start="17.02" data-duration="0.3" data-track-index="35" data-volume="0.5" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="a17" data-start="19.02" data-duration="0.25" data-track-index="36" data-volume="0.45" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="a18" data-start="19.52" data-duration="0.2" data-track-index="37" data-volume="0.45" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="a19" data-start="21.01" data-duration="0.3" data-track-index="38" data-volume="0.6" src="assets/sfx/impact/impactSoft_medium_000.ogg"></audio>
+      <audio id="a20" data-start="22.01" data-duration="0.25" data-track-index="39" data-volume="0.5" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="a21" data-start="23.52" data-duration="0.3" data-track-index="40" data-volume="0.55" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="a22" data-start="24.52" data-duration="0.12" data-track-index="41" data-volume="0.5" src="assets/sfx/interface/click_003.ogg"></audio>
+      <audio id="a23" data-start="26.02" data-duration="0.3" data-track-index="42" data-volume="0.5" src="assets/sfx/casino/card-slide-1.ogg"></audio>
+      <audio id="a24" data-start="27.02" data-duration="0.25" data-track-index="43" data-volume="0.5" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="a25" data-start="28.51" data-duration="0.3" data-track-index="44" data-volume="0.5" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="a26" data-start="29.52" data-duration="0.2" data-track-index="45" data-volume="0.5" src="assets/sfx/interface/select_008.ogg"></audio>
+      <audio id="a27" data-start="30.52" data-duration="0.25" data-track-index="46" data-volume="0.5" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="a28" data-start="32.52" data-duration="1.4" data-track-index="47" data-volume="0.9" src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+      <audio id="a29" data-start="33.53" data-duration="0.4" data-track-index="48" data-volume="0.55" src="assets/sfx/interface/drop_001.ogg"></audio>
+    </div>
+
+    <script>
+      var tl = gsap.timeline({ paused: true });
+      var EASE = "power3.out";
+
+      function riseIn(sel, t, y, dur) {
+        tl.fromTo(sel, { opacity: 0, y: y === undefined ? 18 : y }, { opacity: 1, y: 0, duration: dur || 0.5, ease: EASE }, t);
+      }
+      function riseAll(sel, times, y, dur) {
+        var els = document.querySelectorAll(sel);
+        for (var i = 0; i < els.length; i++) {
+          if (times[i] === undefined) continue;
+          tl.fromTo(els[i], { opacity: 0, y: y === undefined ? 20 : y, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: dur || 0.45, ease: EASE }, times[i]);
+        }
+      }
+
+      // ===== Scene 1 — the problem =====
+      riseIn("#tabstrip", 0.2, 0, 0.8);
+      riseIn("#s1-l1", 0.6);
+      riseIn("#s1-l2", 2.0);
+      riseIn("#s1-l3", 3.52);
+      tl.fromTo("#s1-cursor", { opacity: 0, x: 1180, y: 620 }, { opacity: 1, duration: 0.3 }, 0.4);
+      tl.to("#s1-cursor", { x: 900, y: 360, duration: 2.6, ease: "power1.inOut" }, 0.6);
+      tl.to("#s1-cursor", { x: 1010, y: 300, duration: 1.0, ease: "power2.inOut" }, 3.2);
+      tl.to("#tabstrip", { opacity: 0.1, duration: 1.0 }, 3.6);
+      tl.to("#s1-l1, #s1-l2", { opacity: 0.32, duration: 0.8 }, 3.6);
+      tl.to("#s1-cursor", { opacity: 0, duration: 0.4 }, 3.9);
+
+      // ===== Scene 2 — what it is =====
+      tl.fromTo("#s2-glow", { opacity: 0 }, { opacity: 0.22, duration: 1.0 }, 4.8);
+      tl.fromTo(".orb", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.7, ease: EASE }, 4.8);
+      tl.fromTo(".orb-ring", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.8, stagger: 0.08, ease: EASE }, 4.9);
+      tl.fromTo("#s2-sheen", { rotate: 0 }, { rotate: 360, duration: 35, ease: "none" }, 0);
+      tl.fromTo("#orbit1", { rotate: 0 }, { rotate: 360, duration: 14, ease: "none" }, 0);
+      tl.fromTo("#orbit2", { rotate: 360 }, { rotate: 0, duration: 20, ease: "none" }, 0);
+      riseIn("#s2-l1", 5.03);
+      riseIn("#s2-l2", 6.03);
+      riseIn("#s2-l3", 7.52);
+
+      // ===== Scene 3 — missions =====
+      riseIn("#s3-eyebrow", 9.02, 10, 0.4);
+      riseIn("#s3-title", 9.02, 14, 0.5);
+      riseAll("#s3 .pnode", [10.02, 10.52, 11.02, 11.52, 12.02], 22, 0.45);
+      tl.fromTo("#s3 .plink", { scaleX: 0 }, { scaleX: 1, duration: 0.3, stagger: 0.5 }, 10.3);
+      tl.fromTo("#s3 .pn-bar", { scaleX: 0 }, { scaleX: 1, duration: 0.5, stagger: 0.5 }, 10.42);
+      riseAll("#s3 .agent-chip", [11.2, 11.4, 11.6, 11.8], 14, 0.35);
+      riseIn("#s3-cap", 12.6);
+
+      // ===== Scene 4 — it acts =====
+      riseIn("#s4-eyebrow", 14.02, 10, 0.4);
+      riseIn("#s4-title", 14.02, 14, 0.5);
+      tl.fromTo("#mock-desktop", { opacity: 0, y: 24, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: EASE }, 15.02);
+      tl.fromTo("#mock-browser", { opacity: 0, y: 24, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: EASE }, 15.22);
+      // cursor drives the desktop mock, click lands on the music drop
+      tl.fromTo("#cursor1", { opacity: 0, x: 470, y: 250 }, { opacity: 1, duration: 0.3 }, 15.5);
+      tl.to("#cursor1", { x: 430, y: 232, duration: 0.5, ease: "power1.inOut" }, 15.6);
+      tl.fromTo("#ripple1", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.25 }, 16.02);
+      tl.to("#ripple1", { opacity: 0, scale: 3.2, duration: 0.6, ease: "power2.out" }, 16.15);
+      tl.to("#cursor1", { scale: 0.82, duration: 0.1, yoyo: true, repeat: 1 }, 16.02);
+      // browser types a URL and the page loads
+      var urlText = "https://emily.local/workbench";
+      for (var ci = 0; ci < urlText.length; ci++) {
+        (function (n) {
+          tl.call(function () { document.getElementById("url").textContent = urlText.slice(0, n); }, [], 15.5 + n * 0.05);
+        })(ci + 1);
+      }
+      tl.fromTo("#skeleton span", { backgroundPositionX: "-300px" }, { backgroundPositionX: "300px", duration: 1.2, repeat: 2, ease: "none" }, 15.5);
+      tl.to("#skeleton span", { opacity: 0, duration: 0.4, stagger: 0.06 }, 17.0);
+      riseIn("#s4-cap", 17.02);
+
+      // ===== Scene 5 — voice + memory =====
+      riseIn("#s5-eyebrow", 19.02, 10, 0.4);
+      riseIn("#s5-t1", 19.02, 14, 0.5);
+      tl.fromTo("#s5-wave", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 19.52);
+      riseAll("#s5 .langchip", [19.52, 19.62, 19.72, 19.82, 19.92, 20.02, 20.12, 20.22], 12, 0.35);
+      tl.to("#s5-t1", { opacity: 0.28, duration: 0.5 }, 20.8);
+      tl.to("#s5-wave", { opacity: 0.25, duration: 0.5 }, 20.8);
+      tl.to("#s5 .langchip", { opacity: 0.35, duration: 0.5 }, 20.8);
+      riseIn("#s5-t2", 21.01);
+      tl.fromTo("#s5-mem", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.6, ease: EASE }, 21.4);
+      tl.fromTo("#s5-mem svg line", { strokeDashoffset: 300 }, { strokeDashoffset: 0, duration: 0.6, stagger: 0.12, ease: "power2.out" }, 21.4);
+      tl.fromTo("#s5-mem .mnode", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.4, stagger: 0.12, ease: EASE }, 21.5);
+      tl.fromTo(".mnode.core", { boxShadow: "0 0 12px rgba(159,229,184,0.2)" }, { boxShadow: "0 0 30px rgba(159,229,184,0.6)", duration: 0.6, yoyo: true, repeat: 3 }, 22.1);
+      riseIn("#s5-cap", 22.1);
+
+      // ===== Scene 6 — the cockpit =====
+      tl.fromTo("#s6-glow", { opacity: 0 }, { opacity: 0.5, duration: 1.0 }, 23.1);
+      riseIn("#s6-eyebrow", 23.52, 10, 0.4);
+      tl.fromTo("#ck-window", { opacity: 0, y: 30, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: EASE }, 23.52);
+      tl.fromTo(".ck-item", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.3, stagger: 0.05 }, 23.75);
+      tl.fromTo("#sparkline", { strokeDasharray: 900, strokeDashoffset: 900 }, { strokeDashoffset: 0, duration: 1.1, ease: "power2.inOut" }, 24.2);
+      tl.fromTo(".bars .b", { scaleY: 0.1 }, { scaleY: 1, duration: 0.5, stagger: 0.06, ease: "power3.out" }, 24.2);
+      tl.fromTo(".ck-metric", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, stagger: 0.1 }, 24.52);
+      countRange("#ck-cpu", 0, 18, 24.52, 0.6, "%");
+      countRange("#ck-mem", 0, 6240, 24.52, 0.7, " MB");
+      countRange("#ck-agents", 0, 3, 24.52, 0.5, "");
+      countRange("#ck-miss", 0, 12, 24.52, 0.6, "");
+      tl.fromTo(".ck-feed-line", { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.4, stagger: 0.18, ease: EASE }, 25.2);
+      tl.fromTo("#hud-capture", { opacity: 0, x: -24, y: 24 }, { opacity: 1, x: 0, y: 0, duration: 0.6, ease: EASE }, 25.6);
+      tl.fromTo("#hud-status", { opacity: 0, x: 24, y: 24 }, { opacity: 1, x: 0, y: 0, duration: 0.6, ease: EASE }, 25.8);
+      riseAll("#s6 .dock-chip", [26.4, 26.5, 26.6, 26.7, 26.8, 26.9], 14, 0.35);
+      // immersive push-in
+      tl.to("#ck-window", { scale: 1.035, duration: 4.0, ease: "none" }, 23.9);
+      tl.fromTo("#hud-capture img", { scale: 1.0 }, { scale: 1.06, duration: 4.0, ease: "none" }, 23.9);
+
+      // ===== Scene 7 — why it holds up =====
+      riseIn("#s7-eyebrow", 28.51, 10, 0.4);
+      riseIn("#s7-title", 28.51, 14, 0.5);
+      riseAll("#s7 .hash", [29.02, 29.32, 29.62, 29.92], 16, 0.4);
+      tl.fromTo("#s7 .hlink", { scaleX: 0 }, { scaleX: 1, duration: 0.25, stagger: 0.3 }, 29.2);
+      tl.fromTo("#h4", { boxShadow: "0 0 0 rgba(159,229,184,0)" }, { boxShadow: "0 0 28px rgba(159,229,184,0.6)", duration: 0.5, yoyo: true, repeat: 3 }, 30.0);
+      tl.fromTo("#s7-verify", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.5, ease: EASE }, 30.1);
+      riseIn("#s7-cap", 30.52);
+
+      // ===== Scene 8 — Emily OS =====
+      tl.fromTo("#s8-glow", { opacity: 0 }, { opacity: 0.26, duration: 1.0 }, 32.0);
+      tl.fromTo("#s8-mark", { opacity: 0, scale: 0.9, y: 20 }, { opacity: 1, scale: 1, y: 0, duration: 0.7, ease: EASE }, 32.52);
+      riseIn("#s8-tag", 33.53, 12, 0.6);
+      (function () {
+        var sp = document.getElementById("s8-sparkles");
+        for (var i = 0; i < 22; i++) {
+          var d = document.createElement("span");
+          d.className = "sp";
+          d.style.left = ((i * 137) % 1920) + "px";
+          d.style.top = ((i * 271) % 1080) + "px";
+          d.style.opacity = "0";
+          sp.appendChild(d);
+        }
+      })();
+      tl.fromTo("#s8-sparkles .sp", { opacity: 0, y: 0 }, { opacity: 0.9, y: -60, duration: 1.2, stagger: { each: 0.05, from: "random" }, ease: "power1.out" }, 32.4);
+      tl.fromTo("#s8-sparkles .sp", { opacity: 0.9 }, { opacity: 0, duration: 1.0, stagger: { each: 0.05, from: "random" } }, 33.8);
+      tl.fromTo("#fadeout", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 34.5);
+
+      // ===== HUD chrome =====
+      tl.fromTo("#hud", { opacity: 0 }, { opacity: 1, duration: 0.8 }, 8.5);
+      tl.to("#hud", { opacity: 0, duration: 0.6 }, 32.0);
+
+      // ===== Audio-reactive: glow + voice waveform =====
+      (function () {
+        var AUDIO = window.__HF_AUDIO__;
+        if (!AUDIO || !AUDIO.frames || !AUDIO.frames.length) return;
+        var fps = AUDIO.fps || 30;
+        var maxF = Math.min(AUDIO.frames.length, Math.floor(35 * fps));
+        var g2 = document.getElementById("s2-glow");
+        var g8 = document.getElementById("s8-glow");
+        var bars = document.querySelectorAll("#s5-wave .bar");
+        for (var f = 0; f < maxF; f++) {
+          (function (frame) {
+            tl.call(
+              function () {
+                if (!frame) return;
+                var bass = (frame.bands && frame.bands[0]) || 0;
+                var op = String(0.16 + bass * 0.4);
+                var sc = "scale(" + (1 + bass * 0.08) + ")";
+                if (g2) { g2.style.opacity = op; g2.style.transform = sc; }
+                if (g8) { g8.style.opacity = op; g8.style.transform = sc; }
+                var n = bars.length;
+                for (var i = 0; i < n; i++) {
+                  var bi = Math.floor((Math.abs(i - n / 2) / (n / 2)) * 15);
+                  var band = (frame.bands && frame.bands[bi]) || 0;
+                  bars[i].style.transform = "scaleY(" + (0.08 + band * 1.6) + ")";
+                }
+              },
+              [],
+              f / fps
+            );
+          })(AUDIO.frames[f]);
+        }
+      })();
+
+      function countRange(sel, from, to, start, dur, suffix) {
+        var el = document.querySelector(sel);
+        if (!el) return;
+        var o = { v: from };
+        tl.to(o, {
+          v: to,
+          duration: dur,
+          ease: "power2.out",
+          onUpdate: function () { el.textContent = Math.round(o.v).toLocaleString("en-US") + (suffix || ""); }
+        }, start);
+      }
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

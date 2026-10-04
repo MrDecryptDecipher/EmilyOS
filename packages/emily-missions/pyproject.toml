@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emily-missions"
+version = "0.1.0"
+description = "Emily OS mission runtime — LangGraph orchestration, checkpointing, control plane"
+requires-python = ">=3.12"
+dependencies = [
+  "emily-core",
+  "emily-config",
+  "emily-events",
+  "emily-observability",
+  "emily-kernel",
+  "emily-providers",
+  "langgraph>=1.2.0",
+  "pydantic>=2.11.0",
+  "orjson>=3.11.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["emily*"]
+namespaces = true

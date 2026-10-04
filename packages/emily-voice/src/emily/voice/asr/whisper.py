@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import io
+import re
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from emily.voice.asr.language_pick import (
-    pick_best_transcription,
-    retry_language_order,
-    should_retry_transcription,
-)
+if TYPE_CHECKING:
+    from emily.voice.asr.bangla_asr import BanglaASR
+
+from emily.voice.asr.language_pick import should_retry_transcription
 from emily.voice.audio.processing import ensure_float32_mono, resample
 from emily.voice.errors import ASRError, BackendUnavailableError
 from emily.voice.hardware import resolve_whisper_compute_type
@@ -32,8 +32,10 @@ class FasterWhisperASR:
         device: str = "cpu",
         compute_type: str = "int8",
         settings: Any | None = None,
+        bangla: BanglaASR | None = None,
     ) -> None:
         self.settings = settings
+        self._bangla = bangla
         self.model_size = (
             str(getattr(settings, "voice_asr_model", model_size)) if settings is not None else model_size
         )
@@ -140,6 +142,9 @@ class FasterWhisperASR:
         self.last_transcript = ""
         self.last_retry_used = False
 
+    def _bangla_ready(self) -> bool:
+        return self._bangla is not None and self._bangla.available()
+
     def _configured_language(self) -> str | None:
         raw = getattr(self.settings, "voice_asr_language", None) if self.settings is not None else None
         if not raw:
@@ -169,6 +174,13 @@ class FasterWhisperASR:
         initial_prompt: str | None = None,
         condition_on_previous_text: bool = True,
     ) -> tuple[str, str | None, float | None]:
+        if language == "bn" and self._bangla_ready():
+            assert self._bangla is not None
+            if self._bangla._model is None:
+                self._bangla._load_sync()
+            text, det, prob = self._bangla.transcribe_pcm(pcm)
+            return text, det, prob
+
         assert self._model is not None
         kwargs: dict[str, Any] = {
             "language": language,
@@ -230,6 +242,70 @@ class FasterWhisperASR:
             max_indic_retries=max_indic_retries,
         )
 
+    def _transcribe_universal(
+        self,
+        pcm: np.ndarray,
+        *,
+        vad_filter: bool = True,
+        on_status: Callable[[str], None] | None = None,
+    ) -> tuple[str, str | None, float | None, bool]:
+        """
+        Universal ASR: Whisper auto-detect any language, then refine once.
+
+        Specialty models (e.g. BanglaASR) run only when auto-detect matches their
+        language — never in competition with other languages.
+        """
+        def status(msg: str) -> None:
+            if on_status is not None:
+                on_status(msg)
+
+        text, det, prob = self._transcribe_pcm(pcm, language=None, vad_filter=vad_filter)
+        lang = (det or "").split("-")[0].lower()
+        retried = False
+
+        # BanglaASR whenever Whisper says Bengali — do not remap bn→hi.
+        # False English→bn flips are corrected later in resolve_wake_question.
+        if lang == "bn" and self._bangla_ready():
+            status("Transcribing (BanglaASR)...")
+            assert self._bangla is not None
+            if self._bangla._model is None:
+                self._bangla._load_sync()
+            text, det, prob = self._bangla.transcribe_pcm(pcm)
+            return text, det, prob, True
+
+        # Roman Bangla often auto-detects as hi/en — route to BanglaASR on strong hints.
+        from emily.voice.bangla_hints import looks_like_roman_bangla
+
+        if (
+            self._bangla_ready()
+            and looks_like_roman_bangla(text or "")
+            and lang in {"", "en", "hi", "auto", "ur"}
+        ):
+            status("Transcribing (BanglaASR — roman Bangla cues)...")
+            assert self._bangla is not None
+            if self._bangla._model is None:
+                self._bangla._load_sync()
+            text, det, prob = self._bangla.transcribe_pcm(pcm)
+            return text, det, prob, True
+
+        if lang and lang not in {"", "en", "auto"}:
+            uncertain = should_retry_transcription(text, det, prob) or (
+                prob is not None and prob < 0.55
+            )
+            refine = uncertain or prob is None or prob >= 0.45
+            refine_lang = lang
+            # Hinglish is often mislabeled as Urdu — refine as Hindi, never as Urdu.
+            if refine and lang == "ur" and (prob is None or prob < 0.70):
+                refine_lang = "hi"
+            if refine:
+                status(f"Transcribing ({refine_lang})...")
+                text, det, prob = self._transcribe_pcm(
+                    pcm, language=refine_lang, vad_filter=vad_filter
+                )
+                retried = True
+
+        return text, det, prob, retried
+
     def _transcribe_with_retry(
         self,
         pcm: np.ndarray,
@@ -246,68 +322,21 @@ class FasterWhisperASR:
                 on_status(msg)
 
         fixed = language or self._configured_language()
+        if fixed == "bn" and self._bangla_ready():
+            assert self._bangla is not None
+            if self._bangla._model is None:
+                self._bangla._load_sync()
+            text, det, prob = self._bangla.transcribe_pcm(pcm)
+            return text, det, prob, False
+
         if fixed:
             text, det, prob = self._transcribe_pcm(pcm, language=fixed, vad_filter=vad_filter)
             return text, det, prob, False
 
-        candidates: list[tuple[str, str | None, float | None]] = []
-        if language_hint and language_hint not in {"en", "auto"}:
-            for lang in retry_language_order(language_hint)[: min(3, max_indic_retries)]:
-                whisper_lang = "hi" if lang == "or" else lang
-                try:
-                    alt_text, alt_det, alt_prob = self._transcribe_pcm(
-                        pcm, language=whisper_lang, vad_filter=vad_filter
-                    )
-                except ValueError:
-                    continue
-                candidates.append((alt_text, alt_det, alt_prob))
-
-        text, det, prob = self._transcribe_pcm(pcm, language=None, vad_filter=vad_filter)
-        candidates.append((text, det, prob))
-
-        if not self._auto_detect_enabled():
-            best_text, best_det, best_prob = pick_best_transcription(
-                candidates, language_hint=language_hint
-            )
-            return best_text, best_det, best_prob, len(candidates) > 1
-
-        needs_retry = should_retry_transcription(text, det, prob)
-        if multilingual and language_hint and language_hint not in {"en", "auto"}:
-            needs_retry = True
-        if needs_retry:
-            if not multilingual:
-                prob_label = f"{prob:.0%}" if prob is not None else "n/a"
-                status(
-                    f"ASR auto-detect uncertain ({det or '?'} @ {prob_label}); "
-                    "retrying with Indic language models..."
-                )
-            else:
-                status(f"Transcribing question ({language_hint or 'indic'})...")
-            tried = 0
-            for lang in retry_language_order(language_hint):
-                if tried >= max_indic_retries:
-                    break
-                whisper_lang = "hi" if lang == "or" else lang
-                try:
-                    alt_text, alt_det, alt_prob = self._transcribe_pcm(
-                        pcm, language=whisper_lang, vad_filter=vad_filter
-                    )
-                except ValueError:
-                    continue
-                candidates.append((alt_text, alt_det, alt_prob))
-                tried += 1
-            best_text, best_det, best_prob = pick_best_transcription(
-                candidates, language_hint=language_hint
-            )
-            if best_text != text:
-                picked_prob = f"{best_prob:.0%}" if best_prob is not None else "n/a"
-                status(f"ASR picked {best_det or '?'} transcript ({picked_prob} confidence).")
-            return best_text, best_det, best_prob, True
-
-        best_text, best_det, best_prob = pick_best_transcription(
-            candidates, language_hint=language_hint
+        text, det, prob, retried = self._transcribe_universal(
+            pcm, vad_filter=vad_filter, on_status=on_status
         )
-        return best_text, best_det, best_prob, len(candidates) > 1
+        return text, det, prob, retried
 
     async def transcribe(
         self,
@@ -372,6 +401,124 @@ class FasterWhisperASR:
         self.last_retry_used = False
         return text
 
+    async def transcribe_wake_question(
+        self,
+        audio: AudioChunk,
+        *,
+        on_status: Callable[[str], None] | None = None,
+        english_wake_hint: str | None = None,
+    ) -> str:
+        """Wake follow-up: universal auto-detect (any language)."""
+        await self.load()
+        pcm = self._to_pcm16_array(audio)
+        if pcm.size == 0:
+            self.last_transcript = ""
+            return ""
+
+        if on_status is not None:
+            on_status("Transcribing your question (auto-detect)...")
+
+        text, det, prob, retried = await asyncio.to_thread(
+            self._transcribe_universal,
+            pcm,
+            vad_filter=False,
+            on_status=on_status,
+        )
+
+        # Bengali spoken after "Hey Emily" is often heard as English "how are you?"
+        # and then mis-refined as weak Hindi → Devanagari garbage. Retry BanglaASR.
+        text, det, prob, retried = await asyncio.to_thread(
+            self._maybe_bangla_wake_retry,
+            pcm,
+            text,
+            det,
+            prob,
+            retried,
+            english_wake_hint,
+            on_status,
+        )
+
+        self.last_detected_language = det
+        self.last_language_probability = prob
+        self.last_transcript = text or ""
+        self.last_retry_used = retried
+        if on_status is not None and det:
+            prob_label = f"{prob:.0%}" if prob is not None else "n/a"
+            on_status(f"Detected language: {det} ({prob_label})")
+        return text or ""
+
+    def _maybe_bangla_wake_retry(
+        self,
+        pcm: np.ndarray,
+        text: str | None,
+        det: str | None,
+        prob: float | None,
+        retried: bool,
+        english_wake_hint: str | None,
+        on_status: Callable[[str], None] | None,
+    ) -> tuple[str | None, str | None, float | None, bool]:
+        from emily.voice.asr.language_pick import looks_like_garbage_indic_transcript
+        from emily.voice.bangla_hints import (
+            looks_like_bengali_misheard_as_english,
+            looks_like_roman_bangla,
+            wake_english_likely_indic_speech,
+        )
+        from emily.voice.language import has_bengali
+
+        def status(msg: str) -> None:
+            if on_status is not None:
+                on_status(msg)
+
+        hint = (english_wake_hint or "").strip()
+        lang = (det or "").split("-")[0].lower()
+        current = (text or "").strip()
+        hint_norm = hint.lower().strip(" ,.!?")
+        current_norm = current.lower().strip(" ,.!?")
+        indic_wake = wake_english_likely_indic_speech(hint)
+
+        if has_bengali(current) and not looks_like_garbage_indic_transcript(current):
+            return text, det, prob, retried
+        if not self._bangla_ready():
+            return text, det, prob, retried
+
+        # Wake echoed back as the "question" (Whisper re-heard English translation).
+        wake_echo = bool(hint_norm and current_norm and hint_norm == current_norm)
+        want_bangla = (
+            looks_like_roman_bangla(hint)
+            or looks_like_bengali_misheard_as_english(hint)
+            or looks_like_garbage_indic_transcript(current)
+            or wake_echo
+            or indic_wake
+        )
+        if not want_bangla:
+            return text, det, prob, retried
+        # Confident clean Hindi — keep unless wake text screams Indic mistranslation.
+        if (
+            lang == "hi"
+            and prob is not None
+            and prob >= 0.75
+            and current
+            and not looks_like_garbage_indic_transcript(current)
+            and not looks_like_roman_bangla(hint)
+        ):
+            return text, det, prob, retried
+
+        status("Transcribing (BanglaASR — checking Bengali)...")
+        assert self._bangla is not None
+        if self._bangla._model is None:
+            self._bangla._load_sync()
+        res = self._bangla.transcribe_pcm(pcm)
+        if isinstance(res, (tuple, list)) and len(res) >= 3:
+            bn_text, bn_det, bn_prob = res[0], res[1], res[2]
+        else:
+            bn_text, bn_det, bn_prob = "", "bn", 0.0
+        bn_text = (bn_text or "").strip()
+        if has_bengali(bn_text) and not looks_like_garbage_indic_transcript(bn_text):
+            return bn_text, bn_det or "bn", bn_prob, True
+        if looks_like_garbage_indic_transcript(current) and not bn_text:
+            return text, det, prob, retried
+        return text, det, prob, retried
+
     async def transcribe_wake_followup(
         self,
         audio: AudioChunk,
@@ -379,29 +526,9 @@ class FasterWhisperASR:
         language_hint: str | None = None,
         on_status: Callable[[str], None] | None = None,
     ) -> str:
-        """Fast wake follow-up ASR: Hindi-first for Hinglish, capped Indic retries."""
-        from emily.voice.asr.language_pick import detect_language_hint_from_text
-
-        hint = language_hint or detect_language_hint_from_text("") or "hi"
-        # Hinglish wake follow-ups: force Hindi path — shopping ta/te/bn often hallucinates.
-        if hint in {"hi", "mr", None, ""}:
-            return await self.transcribe(
-                audio,
-                language="hi",
-                language_hint="hi",
-                on_status=on_status,
-                multilingual=False,
-                vad_filter=False,
-                max_indic_retries=1,
-            )
-        return await self.transcribe(
-            audio,
-            language_hint=hint,
-            on_status=on_status,
-            multilingual=True,
-            vad_filter=False,
-            max_indic_retries=2,
-        )
+        """Wake follow-up — delegates to language-agnostic auto-detect."""
+        _ = language_hint
+        return await self.transcribe_wake_question(audio, on_status=on_status)
 
     async def transcribe_followup(
         self,

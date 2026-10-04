@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emily-desktop"
+version = "0.1.0"
+description = "Emily OS desktop runtime — Windows a11y, clipboard, input, PowerShell, registry"
+requires-python = ">=3.12"
+dependencies = [
+  "emily-core",
+  "emily-config",
+  "emily-events",
+  "emily-observability",
+  "emily-kernel",
+  "emily-tools",
+  "pydantic>=2.11.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["emily*"]
+namespaces = true

@@ -34,6 +34,20 @@ members = [
   "packages/emily-config",
   "packages/emily-observability",
   "packages/emily-kernel",
+  "packages/emily-providers",
+  "packages/emily-missions",
+  "packages/emily-agents",
+  "packages/emily-memory",
+  "packages/emily-tools",
+  "packages/emily-desktop",
+  "packages/emily-browser",
+  "packages/emily-voice",
+  "packages/emily-vision",
+  "packages/emily-security",
+  "packages/emily-plugins",
+  "packages/emily-coding",
+  "packages/emily-trading",
+  "packages/emily-web3-security",
   "apps/emily-cli",
 ]
 
@@ -43,6 +57,20 @@ emily-events = { workspace = true }
 emily-config = { workspace = true }
 emily-observability = { workspace = true }
 emily-kernel = { workspace = true }
+emily-providers = { workspace = true }
+emily-missions = { workspace = true }
+emily-agents = { workspace = true }
+emily-memory = { workspace = true }
+emily-tools = { workspace = true }
+emily-desktop = { workspace = true }
+emily-browser = { workspace = true }
+emily-voice = { workspace = true }
+emily-vision = { workspace = true }
+emily-security = { workspace = true }
+emily-plugins = { workspace = true }
+emily-coding = { workspace = true }
+emily-trading = { workspace = true }
+emily-web3-security = { workspace = true }
 emily-cli = { workspace = true }
 
 [tool.pytest.ini_options]
@@ -56,6 +84,20 @@ pythonpath = [
   "packages/emily-config/src",
   "packages/emily-observability/src",
   "packages/emily-kernel/src",
+  "packages/emily-providers/src",
+  "packages/emily-missions/src",
+  "packages/emily-agents/src",
+  "packages/emily-memory/src",
+  "packages/emily-tools/src",
+  "packages/emily-desktop/src",
+  "packages/emily-browser/src",
+  "packages/emily-voice/src",
+  "packages/emily-vision/src",
+  "packages/emily-security/src",
+  "packages/emily-plugins/src",
+  "packages/emily-coding/src",
+  "packages/emily-trading/src",
+  "packages/emily-web3-security/src",
   "apps/emily-cli/src",
 ]
 addopts = "-q --strict-markers --cov=emily --cov-report=term-missing"
@@ -81,6 +123,19 @@ src = [
   "packages/emily-config/src",
   "packages/emily-observability/src",
   "packages/emily-kernel/src",
+  "packages/emily-providers/src",
+  "packages/emily-missions/src",
+  "packages/emily-agents/src",
+  "packages/emily-memory/src",
+  "packages/emily-tools/src",
+  "packages/emily-desktop/src",
+  "packages/emily-browser/src",
+  "packages/emily-voice/src",
+  "packages/emily-vision/src",
+  "packages/emily-security/src",
+  "packages/emily-plugins/src",
+  "packages/emily-coding/src",
+  "packages/emily-trading/src",
   "apps/emily-cli/src",
   "tests",
 ]
@@ -110,6 +165,19 @@ mypy_path = [
   "packages/emily-config/src",
   "packages/emily-observability/src",
   "packages/emily-kernel/src",
+  "packages/emily-providers/src",
+  "packages/emily-missions/src",
+  "packages/emily-agents/src",
+  "packages/emily-memory/src",
+  "packages/emily-tools/src",
+  "packages/emily-desktop/src",
+  "packages/emily-browser/src",
+  "packages/emily-voice/src",
+  "packages/emily-vision/src",
+  "packages/emily-security/src",
+  "packages/emily-plugins/src",
+  "packages/emily-coding/src",
+  "packages/emily-trading/src",
   "apps/emily-cli/src",
 ]
 packages = ["emily", "emily_cli"]

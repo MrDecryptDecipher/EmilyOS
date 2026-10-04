@@ -12,7 +12,7 @@ from emily.voice.models import HardwareProfile, SpeechPlan, TTSCapability
 from emily.voice.settings_bridge import prefer_lightweight_tts, voice_flag
 from emily.voice.speech.styles import is_expressive
 from emily.voice.tts.base import TTSEngine
-from emily.voice.tts.registry import TTS_CAPABILITIES
+from emily.voice.tts.registry import TTS_CAPABILITIES, kokoro_supports, language_requires_indicf5
 
 
 def _lang_supported(cap: TTSCapability, lang: str) -> bool:
@@ -36,10 +36,14 @@ def score_backend(
         return -1e6
     score = 100.0 - float(cap.priority) * 10.0
     lang = plan.language.split("-")[0].lower()
-    if _lang_supported(cap, lang):
+    if name == "kokoro" and not kokoro_supports(lang):
+        score -= 10_000.0
+    elif _lang_supported(cap, lang):
         score += 40.0
     else:
         score -= 30.0
+    if name == "indicf5" and language_requires_indicf5(lang):
+        score += 90.0
     if plan.tts_backend == name:
         score += 50.0
     default = str(voice_flag(settings, "tts_default", "") or "")
@@ -49,6 +53,7 @@ def score_backend(
         score += 35.0
     if name == "voicebox":
         score += 55.0
+    
     # When Voicebox is the configured default, Kokoro is the calm fallback — not IndicF5.
     if default == "voicebox":
         if name == "kokoro" and lang == "hi":
@@ -61,9 +66,10 @@ def score_backend(
         score += 8.0
     if plan.code_switching and cap.multilingual:
         score += 5.0
-    # CPU: Kokoro is ~100x faster than IndicF5; avoid multi-minute hangs and bad CPU synth.
+    # CPU: Kokoro is ~100x faster than IndicF5 — unless Kokoro cannot speak this language.
     if prefer_lightweight_tts(settings) and name in {"chatterbox", "indicf5"}:
-        score -= 120.0
+        if not language_requires_indicf5(lang):
+            score -= 120.0
     # LOW hardware: never prefer heavy backends unless they are the only option
     profile = hardware_profile
     if profile is None:
@@ -72,7 +78,8 @@ def score_backend(
         except Exception:
             profile = None
     if profile == HardwareProfile.LOW and name in {"chatterbox", "indicf5"}:
-        score -= 80.0
+        if not language_requires_indicf5(lang):
+            score -= 80.0
     return score
 
 

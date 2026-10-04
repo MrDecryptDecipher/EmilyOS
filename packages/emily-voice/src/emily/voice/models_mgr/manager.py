@@ -68,6 +68,17 @@ _MODEL_CATALOG: dict[str, dict[str, Any]] = {
             "Windows: HF_HUB_DISABLE_SYMLINKS=1 + scripts/fix-whisper-cache.ps1 if WinError 1314."
         ),
     },
+    "bangla-asr": {
+        "size_hint": "~500MB",
+        "path": "data/voice/models/bangla-asr",
+        "repo_id": "bangla-speech-processing/BanglaASR",
+        "instructions": (
+            "pip install 'emily-voice[bangla-asr]'\n"
+            "Set EMILY_VOICE_BANGLA_ASR_ENABLED=true (default).\n"
+            "Model: https://huggingface.co/bangla-speech-processing/BanglaASR\n"
+            "Used automatically when Bengali (bn) is detected or configured."
+        ),
+    },
     "silero-vad": {
         "size_hint": "~2MB",
         "path": "data/voice/models/silero-vad",

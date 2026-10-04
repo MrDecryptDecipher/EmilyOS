@@ -12,6 +12,13 @@ from typing import Any
 import numpy as np
 
 from emily.voice.asr.whisper import FasterWhisperASR
+from emily.voice.bangla_hints import (
+    bangla_hint_score,
+    looks_like_bengali_misheard_as_english,
+    looks_like_generic_bangla_greeting,
+    looks_like_roman_bangla,
+    unlikely_voice_assistant_english,
+)
 from emily.voice.audio.capture import AudioCapture
 from emily.voice.audio.processing import chunk_has_speech, chunk_rms
 from emily.voice.errors import BackendUnavailableError
@@ -63,6 +70,14 @@ def _looks_like_hinglish(text: str) -> bool:
     return bool(_HINGLISH_RE.search(text or ""))
 
 
+def _looks_like_bangla(text: str) -> bool:
+    return looks_like_roman_bangla(text) or bangla_hint_score(text) >= 1
+
+
+def _bangla_token_count(text: str) -> int:
+    return bangla_hint_score(text)
+
+
 def _hinglish_token_count(text: str) -> int:
     return len(_HINGLISH_RE.findall(text or ""))
 
@@ -101,6 +116,9 @@ def _english_followup_is_trusted(en_followup: str) -> bool:
     text = (en_followup or "").strip()
     if len(text) < 2:
         return False
+    bangla_hits = _bangla_token_count(text)
+    if bangla_hits >= 2 or (bangla_hits >= 1 and not _looks_like_hinglish(text)):
+        return True
     # Strong roman Hinglish from English ASR is usually correct — keep it (avoid Tamil swaps).
     hinglish_hits = _hinglish_token_count(text)
     if hinglish_hits >= 2 or (hinglish_hits >= 1 and len(re.findall(r"[a-zA-Z']+", text)) >= 5):
@@ -117,6 +135,8 @@ def _english_followup_is_trusted(en_followup: str) -> bool:
         return False
     if _SUSPICIOUS_WAKE_FOLLOWUP.search(text):
         return False
+    if unlikely_voice_assistant_english(text) or looks_like_bengali_misheard_as_english(text):
+        return False
     # Specific factual English questions (time, weather, name) can be trusted.
     if _CLEAR_ENGLISH_QUESTION.search(text) and len(words) >= 3:
         return True
@@ -126,6 +146,10 @@ def _english_followup_is_trusted(en_followup: str) -> bool:
 def _english_followup_needs_retranscribe(en_followup: str) -> bool:
     """Re-transcribe wake audio when English wake ASR may have mis-heard Indic speech."""
     if not (en_followup or "").strip():
+        return True
+    if _looks_like_bangla(en_followup) or looks_like_generic_bangla_greeting(en_followup):
+        return True
+    if looks_like_bengali_misheard_as_english(en_followup):
         return True
     if _looks_like_translated_hindi_greeting(en_followup):
         return True
@@ -138,13 +162,29 @@ _GENERIC_HINGLISH_GREETING = re.compile(
 )
 
 
+def _multi_uses_arabic_script(text: str) -> bool:
+    """Urdu and Arabic script (Whisper often labels Hinglish as ``ur``)."""
+    return any("\u0600" <= ch <= "\u06FF" for ch in text)
+
+
 def _multi_is_wrong_script_for_hinglish(multi_followup: str) -> bool:
     from emily.voice.language import script_counts
 
     counts = script_counts(multi_followup)
     hi = counts.get("hi", 0) + counts.get("mr", 0)
     wrong = sum(counts.get(lang, 0) for lang in ("ta", "te", "bn", "kn", "ml", "gu", "pa", "as"))
-    return wrong > 0 and hi == 0
+    if wrong > 0 and hi == 0:
+        return True
+    return _multi_uses_arabic_script(multi_followup) and hi == 0
+
+
+def _multi_is_wrong_script_for_bangla(multi_followup: str) -> bool:
+    from emily.voice.language import script_counts
+
+    counts = script_counts(multi_followup)
+    bn = counts.get("bn", 0)
+    wrong = sum(counts.get(lang, 0) for lang in ("hi", "mr", "ta", "te", "kn", "ml", "gu", "pa", "as"))
+    return wrong > 0 and bn == 0
 
 
 def _should_prefer_multilingual_followup(
@@ -166,6 +206,21 @@ def _should_prefer_multilingual_followup(
     # Never replace clear roman Hinglish with Tamil/Telugu/Bengali script hallucinations.
     if _looks_like_hinglish(en_followup) and _multi_is_wrong_script_for_hinglish(multi_followup):
         return False
+    # Never replace clear roman Bangla with Hindi/Devanagari hallucinations.
+    if _looks_like_bangla(en_followup) and _multi_is_wrong_script_for_bangla(multi_followup):
+        return False
+    # English wake greeting + Arabic/Urdu script, or Bengali that still contains the wake name.
+    if _looks_like_translated_hindi_greeting(en_followup) and (
+        _multi_uses_arabic_script(multi_followup)
+        or _multi_echoes_wake_phrase(multi_followup)
+    ):
+        return False
+    if (
+        looks_like_generic_bangla_greeting(multi_followup.strip())
+        and _english_followup_is_trusted(en_followup)
+        and not _looks_like_bangla(en_followup)
+    ):
+        return False
     if (
         _GENERIC_HINGLISH_GREETING.match(multi_followup.strip())
         and _english_followup_is_trusted(en_followup)
@@ -174,8 +229,16 @@ def _should_prefer_multilingual_followup(
     if indic_script_share(multi_followup) >= 0.05:
         if _looks_like_hinglish(en_followup) and _multi_is_wrong_script_for_hinglish(multi_followup):
             return False
+        if _looks_like_translated_hindi_greeting(en_followup) and _multi_echoes_wake_phrase(
+            multi_followup
+        ):
+            return False
         return True
     if _looks_like_hinglish(multi_followup) and not _looks_like_hinglish(en_followup):
+        if _looks_like_bangla(en_followup) and not _looks_like_bangla(multi_followup):
+            return False
+        return True
+    if _looks_like_bangla(multi_followup) and not _looks_like_bangla(en_followup):
         return True
     if detected_language in INDIC_ASR_CANDIDATES:
         if detected_language in {"ta", "te", "bn", "kn", "ml"} and _looks_like_hinglish(en_followup):
@@ -195,7 +258,13 @@ def _should_prefer_multilingual_followup(
         if _multi_is_wrong_script_for_hinglish(multi_followup):
             return _looks_like_hinglish(multi_followup)
         return True
+    if _looks_like_translated_hindi_greeting(en_followup) and _multi_uses_arabic_script(
+        multi_followup
+    ):
+        return False
     if looks_like_english_hallucination(en_followup, language_probability=0.45):
+        return True
+    if looks_like_bengali_misheard_as_english(en_followup) and multi_followup.strip():
         return True
     counts = script_counts(multi_followup)
     if counts.get("hi", 0) + counts.get("te", 0) + counts.get("bn", 0) > 0:
@@ -203,6 +272,142 @@ def _should_prefer_multilingual_followup(
             return False
         return True
     return False
+
+
+def _multi_echoes_wake_phrase(multi: str) -> bool:
+    """True when multilingual ASR re-transcribed the wake name inside the question."""
+    t = (multi or "").strip().lower()
+    if not t:
+        return False
+    if "emily" in t or "emil" in t:
+        return True
+    # Bengali / Devanagari / Urdu spellings of Emily (incl. common ASR misspellings).
+    for needle in (
+        "এমিলি",
+        "আমিলি",
+        "অ্যামিলি",
+        "এমিলী",
+        "আমিলী",
+        "অ্যামিলী",
+        "एमिली",
+        "एмили",
+        "امیلی",
+        "میلی",
+        "امیل",
+    ):
+        if needle in multi:
+            return True
+    return False
+
+
+_BN_WAKE_PREFIX = re.compile(
+    r"^(?:হে|এই|হাই)\s*(?:অ্যামিলি|এমিলি|আমিলি|অ্যামিলী|এমিলী|আমিলী)\s*[,:]?\s*",
+)
+_BN_HINGLISH_CALQUE = re.compile(r"হাল\s*চাল|ক্যা\s*হাল|কিছু\s*হাল")
+
+
+def _strip_indic_wake_name(text: str) -> str:
+    """Remove Bengali/Indic wake-name echo, keep the real question."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return ""
+    cleaned = _BN_WAKE_PREFIX.sub("", cleaned).strip(" ,.?!")
+    return cleaned
+
+
+def _looks_like_hinglish_calqued_in_bengali(text: str) -> bool:
+    """Devanagari/Bengali-script Hinglish like 'কিছু হাল চাল' (kya haal chaal)."""
+    return bool(_BN_HINGLISH_CALQUE.search(text or ""))
+
+
+def _wake_multilingual_looks_like_mistranscription(
+    en_followup: str,
+    multi_followup: str,
+    *,
+    detected_language: str | None,
+) -> bool:
+    """Latin English wake follow-up + non-Latin multi that likely mis-heard the utterance."""
+    en = (en_followup or "").strip()
+    multi = (multi_followup or "").strip()
+    if not en or not multi:
+        return False
+    from emily.voice.language import has_bengali, latin_letter_share
+
+    if latin_letter_share(en) < 0.65:
+        return False
+    # Wake name still inside the "question" → specialty ASR re-heard the whole utterance.
+    if _multi_echoes_wake_phrase(multi):
+        return True
+    if not _looks_like_translated_hindi_greeting(en):
+        return False
+    # Real Bengali without Emily echo should win over English greeting translation.
+    if has_bengali(multi) and not _multi_echoes_wake_phrase(multi):
+        return False
+    det = (detected_language or "").split("-")[0].lower()
+    if _multi_uses_arabic_script(multi):
+        return True
+    if det in {"ur", "ar"}:
+        return True
+    return False
+
+
+def _pick_wake_question(
+    en_followup: str,
+    multi_followup: str,
+    *,
+    detected_language: str | None,
+) -> str:
+    """Choose the best question text from English wake ASR vs multilingual re-transcribe."""
+    en = (en_followup or "").strip()
+    multi = (multi_followup or "").strip()
+    if not multi:
+        return en
+    if not en:
+        return multi
+    from emily.voice.asr.language_pick import looks_like_garbage_indic_transcript
+    from emily.voice.language import has_bengali
+
+    # Devanagari/Bengali hallucinations must not beat a clear English wake follow-up.
+    if looks_like_garbage_indic_transcript(multi):
+        return en
+    # "হে অ্যামিলি কেমন আছে" → keep "কেমন আছে" (real Bengali after wake echo).
+    bn_q = _strip_indic_wake_name(multi)
+    if has_bengali(bn_q) and bn_q != multi:
+        if _looks_like_translated_hindi_greeting(en) and _looks_like_hinglish_calqued_in_bengali(
+            bn_q
+        ):
+            return en
+        return bn_q
+    if _wake_multilingual_looks_like_mistranscription(
+        en,
+        multi,
+        detected_language=detected_language,
+    ):
+        return en
+    if has_bengali(multi) and not _multi_echoes_wake_phrase(multi):
+        return multi
+    if has_bengali(bn_q):
+        if _looks_like_translated_hindi_greeting(en) and _looks_like_hinglish_calqued_in_bengali(
+            bn_q
+        ):
+            return en
+        return bn_q
+    if _should_prefer_multilingual_followup(
+        en,
+        multi,
+        detected_language=detected_language,
+    ):
+        return multi
+    det = (detected_language or "").split("-")[0].lower()
+    if det and det not in {"", "en", "auto"}:
+        # Non-English question — wake English ASR often mistranslates (e.g. French → English).
+        if det == "bn" and _looks_like_translated_hindi_greeting(en):
+            pass
+        else:
+            return multi
+    if _english_followup_is_trusted(en):
+        return en
+    return multi
 
 
 async def resolve_wake_question(
@@ -214,47 +419,43 @@ async def resolve_wake_question(
     """
     Extract the user's question after the wake phrase.
 
-    Wake detection uses English ASR (reliable for "Hey Emily"). If the user continued
-    in Hindi/Hinglish in the same breath, re-transcribe the same audio with multilingual
-    ASR and prefer that follow-up when it looks more accurate.
+    Wake *detection* still uses English-biased ASR (reliable for "Hey Emily").
+    The follow-up question is re-transcribed with multilingual auto-detect, then
+    merged with the English wake transcript when that path is more trustworthy.
     """
     en_followup = _strip_wake_phrase(hit.phrase, hit.transcript)
-    if not en_followup.strip():
-        return ""
 
     def status(msg: str) -> None:
         if on_status is not None:
             on_status(msg)
 
-    if hit.audio is None or not _english_followup_needs_retranscribe(en_followup):
-        status(f"Question: {en_followup!r}")
+    if hit.audio is None:
+        if en_followup.strip():
+            status(f"Question: {en_followup!r}")
         return en_followup.strip()
 
-    status("Extracting your question from wake audio...")
-    from emily.voice.asr.language_pick import detect_language_hint_from_text
-
-    lang_hint = detect_language_hint_from_text(en_followup)
-    # Greeting-style English from wake ASR is usually Hindi speech — force Hindi path.
-    if _looks_like_translated_hindi_greeting(en_followup) or not lang_hint:
-        lang_hint = "hi"
-    multi_full = await asr.transcribe_wake_followup(
+    multi_full = await asr.transcribe_wake_question(
         hit.audio,
-        language_hint=lang_hint,
         on_status=on_status,
+        english_wake_hint=en_followup,
     )
     multi_followup = _strip_wake_phrase(hit.phrase, multi_full)
     detected = getattr(asr, "last_detected_language", None)
-    if _should_prefer_multilingual_followup(
+    question = _pick_wake_question(
         en_followup,
         multi_followup,
         detected_language=detected,
-    ):
-        if multi_followup.strip():
-            det = f" [{detected}]" if detected else ""
-            status(f"Question{det}: {multi_followup!r}")
-            return multi_followup.strip()
-    status(f"Question: {en_followup!r}")
-    return en_followup.strip()
+    )
+
+    if question.strip():
+        det = f" [{detected}]" if detected and multi_followup.strip() else ""
+        status(f"Question{det}: {question!r}")
+        return question.strip()
+
+    if en_followup.strip():
+        status(f"Question: {en_followup!r}")
+        return en_followup.strip()
+    return ""
 
 
 def _strip_wake_phrase(phrase: str, transcript: str) -> str:
@@ -533,8 +734,8 @@ class WakeWordListener:
         min_rms = self._mic_min_rms()
         self._status(
             f"Say {self.phrase!r} at a natural pace ({chunk_s:.0f}s window). "
-            "Include your question in the same breath, e.g. "
-            "'Hey Emily, kya haal hai?' or 'Hey Emily, what time is it?'"
+            "Include your question in the same breath — any language works, e.g. "
+            "'Hey Emily, what time is it?' or 'Hey Emily, tumi kemon acho?'"
         )
         while attempt < max_attempts:
             attempt += 1

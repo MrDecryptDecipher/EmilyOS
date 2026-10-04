@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emily-coding"
+version = "0.1.0"
+description = "Emily OS — Coding Workbench, Indexer, & Refactoring Engine"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "emily-core",
+  "emily-events",
+  "emily-config",
+  "emily-kernel",
+  "pydantic>=2.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

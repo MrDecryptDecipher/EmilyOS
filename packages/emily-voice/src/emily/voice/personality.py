@@ -42,6 +42,22 @@ def load_personality(path: Path | str | None = None, *, settings: Any | None = N
     return VoicePersonality.model_validate({**DEFAULT_PERSONALITY.model_dump(), **raw})
 
 
+BENGALI_IMPRESS_RESPONSE_PHONETIC = "Maarbo Ekhaane, Laash Porbe Shoshaane"
+BENGALI_IMPRESS_RESPONSE_BENGLI = "মারবো এখানে, লাশ পড়বে শ্মশানে"
+
+
+def check_impress_context(text: str) -> str | None:
+    """Check if the user request matches the impress context phrase.
+
+    Returns the iconic Bengali response when matched.
+    """
+    normalized = text.lower().strip()
+    keywords = ["impress me", "hey emily impress me", "impress", "amake impress koro", "bengali impress"]
+    if any(k in normalized for k in keywords):
+        return BENGALI_IMPRESS_RESPONSE_PHONETIC
+    return None
+
+
 def save_personality(
     personality: VoicePersonality,
     path: Path | str | None = None,

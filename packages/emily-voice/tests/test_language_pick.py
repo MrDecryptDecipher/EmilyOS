@@ -19,3 +19,11 @@ def test_detect_language_hint_telugu_roman() -> None:
 
 def test_detect_language_hint_hinglish() -> None:
     assert detect_language_hint_from_text("kya haal hai bhai") == "hi"
+
+
+def test_detect_language_hint_roman_bangla() -> None:
+    assert detect_language_hint_from_text("tumi kemon acho ami bhalo achi") == "bn"
+
+
+def test_detect_language_hint_bangla_before_ambiguous_ki() -> None:
+    assert detect_language_hint_from_text("apni kemon achhen") == "bn"

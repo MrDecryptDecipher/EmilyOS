@@ -1,0 +1,13 @@
+[project]
+name = "emily-web3-security"
+version = "0.1.0"
+description = "Local-only Web3 bounty and forensics helpers"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
+from emily.voice.asr.bangla_asr import BanglaASR
 from emily.voice.asr.whisper import FasterWhisperASR
 from emily.voice.audio.capture import AudioCapture
 from emily.voice.audio.playback import AudioPlayback
@@ -72,13 +73,17 @@ class VoiceRuntime:
         tasks: list[Any] = []
         if self._asr is not None:
             tasks.append(self._asr.load())
+        # BanglaASR loads lazily when auto-detect confirms Bengali — avoids slow startup
+        # and prevents transformers noise on Hinglish/English sessions.
         kokoro = self._engines.get("kokoro")
         if kokoro is not None and kokoro.available():
             load = getattr(kokoro, "load", None)
             if load is not None:
                 tasks.append(load(language="en"))
-        indicf5 = self._engines.get("indicf5")
-        if indicf5 is not None and indicf5.available():
+        indicf5 = self._all_engines.get("indicf5") if hasattr(self, "_all_engines") else self._engines.get("indicf5")
+        if indicf5 is not None and indicf5.available() and bool(
+            voice_flag(self.settings, "tts_enable_indicf5", False)
+        ):
             load = getattr(indicf5, "load", None)
             if load is not None:
                 tasks.append(load(language="hi"))
@@ -113,18 +118,23 @@ class VoiceRuntime:
                 "indicf5": IndicF5TTS(settings=self.settings, device=device),  # type: ignore[dict-item]
                 "chatterbox": ChatterboxTTS(device=device),  # type: ignore[dict-item]
             }
+            self._all_engines = registered
             self._engines = enabled_backends(self.settings, registered)
         else:
             self._engines = enabled_backends(self.settings, self._engines)
+            if not hasattr(self, "_all_engines") or not self._all_engines:
+                self._all_engines = dict(self._engines)
         self.models.bind_engines(self._engines)
         playback = self._playback or AudioPlayback()
         capture = self._capture or AudioCapture()
         asr_device = "cuda" if self.device == "cuda" else "cpu"
-        asr = self._asr or FasterWhisperASR(settings=self.settings, device=asr_device)
+        bangla = BanglaASR(settings=self.settings, device=asr_device)
+        asr = self._asr or FasterWhisperASR(settings=self.settings, device=asr_device, bangla=bangla)
         self._asr = asr
         self.engine = VoiceConversationEngine(
             settings=self.settings,
             engines=self._engines,
+            all_engines=getattr(self, "_all_engines", self._engines),
             asr=asr,
             capture=capture,
             playback=playback,

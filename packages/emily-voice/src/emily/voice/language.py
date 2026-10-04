@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 
+from emily.voice.bangla_hints import bangla_hint_score, hinglish_disambig_score
 from emily.voice.models import LanguageState
 
 # Unicode script ranges for major Indic languages + Latin.
@@ -40,6 +41,11 @@ _INDIAN_LANGS = frozenset({"hi", "mr", "te", "or", "bn", "ta", "kn", "ml", "gu",
 def has_devanagari(text: str) -> bool:
     """True when text contains Devanagari script (Hindi/Marathi)."""
     return any("\u0900" <= ch <= "\u097F" for ch in text)
+
+
+def has_bengali(text: str) -> bool:
+    """True when text contains Bengali script."""
+    return any("\u0980" <= ch <= "\u09FF" for ch in text)
 
 
 def latin_letter_share(text: str) -> float:
@@ -111,7 +117,20 @@ class LanguageDetector:
 
         # Hinglish: Latin script with Hindi romanized cues
         if primary == "en" and _HINGLISH_HINTS.search(text):
-            primary = "hi"
+            b_score = bangla_hint_score(text)
+            h_score = max(len(_HINGLISH_HINTS.findall(text)), hinglish_disambig_score(text))
+            if b_score >= 2 and b_score > h_score:
+                primary = "bn"
+                secondary = "en"
+                code_switching = True
+                primary_share = max(primary_share, 0.55)
+            else:
+                primary = "hi"
+                secondary = "en"
+                code_switching = True
+                primary_share = max(primary_share, 0.55)
+        elif primary == "en" and bangla_hint_score(text) >= 2:
+            primary = "bn"
             secondary = "en"
             code_switching = True
             primary_share = max(primary_share, 0.55)

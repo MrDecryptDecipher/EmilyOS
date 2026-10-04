@@ -23,8 +23,13 @@ from emily.voice.personality import DEFAULT_PERSONALITY, VoicePersonality, load_
 from emily.voice.session.barge_in import BargeInHandler
 from emily.voice.session.barge_monitor import BargeInMonitor
 from emily.voice.session.turn_taking import TurnTakingController
-from emily.voice.settings_bridge import voice_flag
+from emily.voice.settings_bridge import effective_engines_for_language, voice_flag
 from emily.voice.speech.director import SpeechDirector
+from emily.voice.speech.cultural_context import (
+    cultural_reply_guidance,
+    infer_reply_language,
+    spoken_language_instruction,
+)
 from emily.voice.speech.spoken_policy import spoken_system_prompt
 from emily.voice.tts.base import TTSEngine
 from emily.voice.tts.router import select_tts_backend
@@ -78,6 +83,7 @@ class VoiceConversationEngine:
         *,
         settings: Any | None = None,
         engines: Mapping[str, TTSEngine] | None = None,
+        all_engines: Mapping[str, TTSEngine] | None = None,
         asr: FasterWhisperASR | None = None,
         capture: AudioCapture | None = None,
         playback: AudioPlayback | None = None,
@@ -89,6 +95,7 @@ class VoiceConversationEngine:
     ) -> None:
         self.settings = settings
         self.engines: dict[str, TTSEngine] = dict(engines or {})
+        self._all_engines: dict[str, TTSEngine] = dict(all_engines or engines or {})
         self.asr = asr or FasterWhisperASR(settings=settings)
         self.capture = capture or AudioCapture()
         self.playback = playback or AudioPlayback()
@@ -113,12 +120,21 @@ class VoiceConversationEngine:
         )
         self._pinned_backend: str | None = None
 
+    def _engines_for_language(self, language: str) -> dict[str, TTSEngine]:
+        return effective_engines_for_language(
+            self.settings,
+            self.engines,
+            self._all_engines,
+            language,
+        )
+
     def _language_for_speech(self, text: str) -> Any:
         """
         TTS language from reply text + user context.
 
         Whisper often labels Roman Hindi as ``en``; reply heuristics must win so
         Kokoro uses the Hindi voice (``hf_beta``) instead of American English.
+        Same for Bengali → IndicF5 / Voicebox with Bengali script.
         """
         reply = self.language.detect(text)
         user = self._current_language_state()
@@ -126,7 +142,7 @@ class VoiceConversationEngine:
         user_dom = (user.dominant or "en").split("-")[0].lower()
 
         if reply_dom != "en" or reply.code_switching:
-            if reply_dom == "hi":
+            if reply_dom in {"hi", "bn"}:
                 return reply.model_copy(update={"code_switching": False, "secondary": None})
             return reply
 
@@ -138,14 +154,42 @@ class VoiceConversationEngine:
     def _current_language_state(self) -> Any:
         state = self.language.state
         detected_language = getattr(self.asr, "last_detected_language", None)
-        if not detected_language:
+        if detected_language:
+            det_base = detected_language.split("-")[0].lower()
+            if det_base not in {"", "auto", "en"}:
+                return state.model_copy(
+                    update={
+                        "dominant": det_base,
+                        "detected_language": det_base,
+                        "user_language_preference": det_base,
+                    }
+                )
+        dom = (state.dominant or "").split("-")[0].lower()
+        if dom and dom not in {"", "auto"}:
             return state
+        detected_language = getattr(self.asr, "last_detected_language", None)
+        pref = self.adaptation.profile.preferred_language
+        reply_lang = infer_reply_language(
+            "",
+            detected=detected_language,
+            session_dominant=state.dominant,
+            preferred=pref,
+        )
         return state.model_copy(
             update={
-                "dominant": detected_language,
-                "detected_language": detected_language,
-                "user_language_preference": detected_language,
+                "dominant": reply_lang,
+                "detected_language": detected_language or reply_lang,
+                "user_language_preference": reply_lang,
             }
+        )
+
+    def _reply_language_for_transcript(self, transcript: str) -> str:
+        detected = getattr(self.asr, "last_detected_language", None)
+        return infer_reply_language(
+            transcript,
+            detected=detected,
+            session_dominant=self.language.state.dominant,
+            preferred=self.adaptation.profile.preferred_language,
         )
 
     @property
@@ -247,9 +291,15 @@ class VoiceConversationEngine:
             self.turns.begin_process()
             status("Transcribing your speech...")
             t1 = time.perf_counter()
+            configured = getattr(self.settings, "voice_asr_language", None) if self.settings else None
+            fixed_lang = None
+            if configured:
+                base = str(configured).split("-")[0].lower().strip()
+                if base not in {"", "auto"}:
+                    fixed_lang = base
             transcript = await self.asr.transcribe(
                 audio,
-                language_hint=self._asr_language_hint(),
+                language=fixed_lang,
                 on_status=on_status,
             )
             asr_s = time.perf_counter() - t1
@@ -334,23 +384,28 @@ class VoiceConversationEngine:
         self.turns.begin_speak()
         self.interruption.reset()
         self.metrics.begin_turn()
-        available = [n for n, e in self.engines.items() if e.available()]
-        if not available and self.engines:
-            raise BackendUnavailableError("no TTS backends available", details={"registered": list(self.engines)})
-        if not self.engines:
+        lang_engines = self._engines_for_language(plan.language)
+        available = [n for n, e in lang_engines.items() if e.available()]
+        if not available and lang_engines:
+            raise BackendUnavailableError(
+                "no TTS backends available",
+                details={"registered": list(lang_engines), "language": plan.language},
+            )
+        if not lang_engines:
             raise BackendUnavailableError("no TTS engines configured")
 
         backend_name = select_tts_backend(
-            plan, self.engines, pinned=self._pinned_backend, settings=self.settings
+            plan, lang_engines, pinned=self._pinned_backend, settings=self.settings
         )
         if not (plan.segments and len({s.language for s in plan.segments if s.language}) > 1):
             self._pinned_backend = backend_name
-        engine = self.engines[backend_name]
+        engine = lang_engines[backend_name]
         plan = plan.model_copy(update={"tts_backend": backend_name})
         if backend_name == "kokoro":
             status("Speaking (Kokoro — fast)...")
         elif backend_name == "indicf5":
-            status("Speaking (IndicF5 — natural Hindi/Indic)...")
+            status("Speaking (IndicF5 — Bengali/Hindi/Indic)...")
+            status("If this hangs, first-time Vocos download can take several minutes...")
         elif backend_name == "voicebox":
             status("Speaking (Voicebox — soft preset voice)...")
         else:
@@ -366,6 +421,55 @@ class VoiceConversationEngine:
             plan.segments
             and len({s.language for s in plan.segments if s.language}) > 1
         )
+
+        async def _synth_with_fallback(active_engine: Any, active_plan: SpeechPlan) -> AudioChunk:
+            try:
+                return await active_engine.synthesize(active_plan)
+            except Exception as exc:
+                if backend_name != "indicf5":
+                    raise
+                fallback = lang_engines.get("kokoro") or lang_engines.get("voicebox")
+                if fallback is None or fallback is active_engine:
+                    raise
+                status(
+                    f"IndicF5 failed ({exc}); falling back to {fallback.name}..."
+                )
+                from emily.voice.language import has_bengali
+                from emily.voice.models import PauseProfile, SpeechSegment
+                from emily.voice.tts.registry import kokoro_supports
+
+                fb_text = (active_plan.text or "").strip()
+                fb_lang = (active_plan.language or "en").split("-")[0].lower()
+                # Kokoro cannot speak Bengali/Tamil/etc. — speak a short English notice.
+                if fallback.name == "kokoro" and (
+                    has_bengali(fb_text) or not kokoro_supports(fb_lang)
+                ):
+                    if has_bengali(fb_text) or fb_lang == "bn":
+                        fb_text = (
+                            "I understood your Bengali. Bengali voice is still loading — "
+                            "please try once more in a moment."
+                        )
+                    else:
+                        fb_text = (
+                            "I understood you, but that language's voice engine failed. "
+                            "Please try again."
+                        )
+                    fb_lang = "en"
+                fb_plan = active_plan.model_copy(
+                    update={
+                        "tts_backend": fallback.name,
+                        "language": fb_lang,
+                        "text": fb_text,
+                        "segments": [
+                            SpeechSegment(
+                                text=fb_text,
+                                language=fb_lang,
+                                pause_after=PauseProfile.MICRO,
+                            )
+                        ],
+                    }
+                )
+                return await fallback.synthesize(fb_plan)
         try:
             texts = plan.segments if plan.segments else None
             if (
@@ -395,16 +499,17 @@ class VoiceConversationEngine:
                             "code_switching": plan.code_switching,
                         }
                     )
+                    seg_engines = self._engines_for_language(seg_lang)
                     seg_backend = select_tts_backend(
                         seg_plan,
-                        self.engines,
+                        seg_engines,
                         pinned=self._pinned_backend,
                         settings=self.settings,
                     )
                     self._pinned_backend = seg_backend
-                    seg_engine = self.engines[seg_backend]
+                    seg_engine = seg_engines[seg_backend]
                     seg_plan = seg_plan.model_copy(update={"tts_backend": seg_backend})
-                    chunk = await seg_engine.synthesize(seg_plan)
+                    chunk = await _synth_with_fallback(seg_engine, seg_plan)
                     chunks.append(chunk)
                     audio_duration += len(chunk.samples) / max(chunk.sample_rate, 1) if isinstance(chunk.samples, list) else 0.0
                     self.metrics.mark_first_audio()
@@ -424,7 +529,7 @@ class VoiceConversationEngine:
                                 pace=1.0,
                             )
             else:
-                chunk = await engine.synthesize(plan)
+                chunk = await _synth_with_fallback(engine, plan)
                 chunks.append(chunk)
                 audio_duration += len(chunk.samples) / max(chunk.sample_rate, 1) if isinstance(chunk.samples, list) else 0.0
                 self.metrics.mark_first_audio()
@@ -469,12 +574,13 @@ class VoiceConversationEngine:
         on_status: Callable[[str], None] | None = None,
     ) -> SpeechPlan:
         lang = self._language_for_speech(text) if text else self.language.state
-        available = [n for n, e in self.engines.items() if e.available()]
+        lang_engines = self._engines_for_language(lang.dominant)
+        available = [n for n, e in lang_engines.items() if e.available()]
         plan = self.director.plan(
             text,
             language_state=lang,
             personality=self._active_personality(),
-            available_backends=available or list(self.engines),
+            available_backends=available or list(lang_engines),
             settings=self.settings,
         )
         final_plan, _chunks = await self.speak_plan(plan, play=play, on_status=on_status)
@@ -507,18 +613,15 @@ class VoiceConversationEngine:
             status("No LLM provider configured; echoing transcript.")
             yield transcript
             return
-        messages: Sequence[Mapping[str, Any]] = [
+        reply_lang = self._reply_language_for_transcript(transcript)
+        messages: list[Mapping[str, Any]] = [
             {"role": "system", "content": spoken_system_prompt()},
-            {
-                "role": "system",
-                "content": (
-                    f"Detected user language: {self._current_language_state().dominant}. "
-                    "Reply in that language unless the user explicitly asks for another one. "
-                    "For Hindi, you MUST write in Devanagari script (हिंदी), never Roman Hinglish."
-                ),
-            },
-            {"role": "user", "content": transcript},
+            {"role": "system", "content": spoken_language_instruction(reply_lang)},
         ]
+        culture = cultural_reply_guidance(transcript, reply_lang)
+        if culture:
+            messages.append({"role": "system", "content": culture})
+        messages.append({"role": "user", "content": transcript})
         t0 = time.perf_counter()
         self.turns.begin_think()
         primary = getattr(router, "primary", "llm")
@@ -740,15 +843,15 @@ class VoiceConversationEngine:
         self.metrics.begin_turn()
         status("Starting conversation turn...")
         self.language.update(transcript)
-        detected_language = getattr(self.asr, "last_detected_language", None)
-        if detected_language:
-            self.language.state = self.language.state.model_copy(
-                update={
-                    "dominant": detected_language,
-                    "detected_language": detected_language,
-                    "user_language_preference": detected_language,
-                }
-            )
+        reply_lang = self._reply_language_for_transcript(transcript)
+        detected_language = getattr(self.asr, "last_detected_language", None) or reply_lang
+        self.language.state = self.language.state.model_copy(
+            update={
+                "dominant": reply_lang,
+                "detected_language": detected_language,
+                "user_language_preference": reply_lang,
+            }
+        )
         if bool(voice_flag(self.settings, "voice_adaptive_pacing", True)) or bool(
             voice_flag(self.settings, "voice_emotion", True)
         ):

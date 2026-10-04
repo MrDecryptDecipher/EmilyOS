@@ -45,6 +45,12 @@ class ExecutiveKernel:
             )
         self._subsystems.append(subsystem)
 
+    def get_subsystem(self, name: str) -> Any | None:
+        for s in self._subsystems:
+            if getattr(s, "name", None) == name:
+                return s
+        return None
+
     async def start(self) -> DefaultKernelContext:
         if self._state == KernelState.RUNNING:
             if self._ctx is None:

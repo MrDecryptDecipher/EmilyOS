@@ -16,24 +16,36 @@ DEFAULT_REF_TEXT = (
 )
 
 # Per-language prompt presets from upstream IndicF5 prompts/.
-# Young female HAPPY Marathi for Hindi — brighter/sweeter than mature WIKI reading voice.
+# We now use perfect native accents generated via edge-tts.
 LANGUAGE_REF_PRESETS: dict[str, tuple[str, str]] = {
     "hi": (
-        "MAR_F_HAPPY_00001.wav",
-        "भावा, दिजेल से दर गशर्लत वद्त या थोडयात, पूल करुन तक ताकी",
+        "hi_ref.wav",
+        "नमस्ते! मैं एमिली हूँ। मैं आपकी कैसे मदद कर सकती हूँ?",
     ),
     "mr": (
-        "MAR_F_HAPPY_00001.wav",
-        "भावा, दिजेल से दर गशर्लत वद्त या थोडयात, पूल करुन तक ताकी",
+        "hi_ref.wav",
+        "नमस्ते! मैं एमिली हूँ। मैं आपकी कैसे मदद कर सकती हूँ?",
+    ),
+    "bn": (
+        "bn_ref.wav",
+        "নমস্কার! আমি এমিলি। আমি আপনাকে কীভাবে সাহায্য করতে পারি?",
+    ),
+    "te": (
+        "te_ref.wav",
+        "నమస్కారం! నేను ఎమిలీని. నేను మీకు ఎలా సహాయపడగలను?",
+    ),
+    "or": (
+        "bn_ref.wav",  # Eastern Indo-Aryan fallback for Odia (much better than Punjabi)
+        "নমস্কার! আমি এমিলি। আমি আপনাকে কীভাবে সাহায্য করতে পারি?",
     ),
     "pa": (DEFAULT_REF_FILENAME, DEFAULT_REF_TEXT),
-    "ta": (DEFAULT_REF_FILENAME, DEFAULT_REF_TEXT),  # fallback until TAM ref text is bundled
+    "ta": (DEFAULT_REF_FILENAME, DEFAULT_REF_TEXT),
     "kn": (DEFAULT_REF_FILENAME, DEFAULT_REF_TEXT),
-    "te": (DEFAULT_REF_FILENAME, DEFAULT_REF_TEXT),
-    "bn": (DEFAULT_REF_FILENAME, DEFAULT_REF_TEXT),
     "gu": (DEFAULT_REF_FILENAME, DEFAULT_REF_TEXT),
-    "as": (DEFAULT_REF_FILENAME, DEFAULT_REF_TEXT),
-    "or": (DEFAULT_REF_FILENAME, DEFAULT_REF_TEXT),
+    "as": (
+        "bn_ref.wav",
+        "নমস্কার! আমি এমিলি। আমি আপনাকে কীভাবে সাহায্য করতে পারি?",
+    ),
 }
 
 # Languages that should prefer the Devanagari (Marathi) reference voice.

@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from emily.voice.bangla_hints import looks_like_roman_bangla
 from emily.voice.models import VoicePersonality
 
 
@@ -105,20 +106,22 @@ class UserAdaptation:
         p.formal_casual = p.formal_casual * 0.85 + target * 0.15
         switched = 1.0 if _CODE_SWITCH.search(text) else 0.0
         p.code_switch_rate = p.code_switch_rate * 0.85 + switched * 0.15
-        # Infer preferred language only from substantial Indic script (avoid 1-word hallucinations).
+        # Infer preferred language from Indic script or strong roman cues.
         if switched:
             indic_chars = len(_CODE_SWITCH.findall(text))
             if indic_chars >= 8:
                 if re.search(r"[\u0C00-\u0C7F]", text):
                     p.preferred_language = "te"
-                elif re.search(r"[\u0900-\u097F]", text):
-                    p.preferred_language = "hi"
                 elif re.search(r"[\u0980-\u09FF]", text):
                     p.preferred_language = "bn"
+                elif re.search(r"[\u0900-\u097F]", text):
+                    p.preferred_language = "hi"
                 elif re.search(r"[\u0B00-\u0B7F]", text):
                     p.preferred_language = "or"
                 elif re.search(r"[\u0B80-\u0BFF]", text):
                     p.preferred_language = "ta"
+        elif looks_like_roman_bangla(text) and len(text) >= 10:
+            p.preferred_language = "bn"
         # Longer user turns → slightly slower Emily speaking rate bias
         if len(text) > 160:
             p.speaking_rate_bias = max(-0.08, p.speaking_rate_bias - 0.01)

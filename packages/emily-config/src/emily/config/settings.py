@@ -301,6 +301,14 @@ class EmilySettings(BaseSettings):
         default=None,
         **_alias("EMILY_VOICE_ASR_LANGUAGE", "VOICE_ASR_LANGUAGE"),
     )
+    voice_bangla_asr_enabled: bool = Field(
+        default=True,
+        **_alias("EMILY_VOICE_BANGLA_ASR_ENABLED", "VOICE_BANGLA_ASR_ENABLED"),
+    )
+    voice_bangla_asr_model: str = Field(
+        default="bangla-speech-processing/BanglaASR",
+        **_alias("EMILY_VOICE_BANGLA_ASR_MODEL", "VOICE_BANGLA_ASR_MODEL"),
+    )
     voice_indicf5_ref_audio: Path | None = Field(
         default=None,
         **_alias("EMILY_VOICE_INDICF5_REF_AUDIO", "VOICE_INDICF5_REF_AUDIO"),

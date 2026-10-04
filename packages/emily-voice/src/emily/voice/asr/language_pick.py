@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from emily.voice.bangla_hints import bangla_hint_score, looks_like_roman_bangla
 from emily.voice.language import script_counts
 
 # Whisper ISO-639-1 codes we retry (Odia `or` is not supported by faster-whisper).
@@ -22,10 +23,6 @@ WHISPER_INDIC_LANGUAGES: tuple[str, ...] = (
 
 _TELUGU_ROMAN = re.compile(
     r"\b(nenu|emi|ela|avunu|cheppu|bagundi|sare|ledu|undhi|undi|meeru)\b",
-    re.IGNORECASE,
-)
-_BENGALI_ROMAN = re.compile(
-    r"\b(ki|kemon|keno|tumi|ami|apni|bhalo|hobe|ache|achhe|kothay)\b",
     re.IGNORECASE,
 )
 _ODIA_ROMAN = re.compile(
@@ -88,6 +85,34 @@ def looks_like_english_hallucination(text: str, *, language_probability: float |
     return False
 
 
+def looks_like_garbage_indic_transcript(text: str) -> bool:
+    """True when Indic-script ASR output looks like a hallucination, not real speech."""
+    cleaned = (text or "").strip()
+    if len(cleaned) < 12:
+        return False
+    from emily.voice.language import has_bengali, has_devanagari
+
+    if not (has_bengali(cleaned) or has_devanagari(cleaned)):
+        return False
+    letters = [ch for ch in cleaned if not ch.isspace() and not ch.isdigit()]
+    if len(letters) < 16:
+        return False
+    unique_ratio = len(set(letters)) / len(letters)
+    if unique_ratio < 0.28:
+        return True
+    tokens = [t for t in re.split(r"\s+", cleaned) if t]
+    if len(tokens) >= 6:
+        from collections import Counter
+
+        top_n, top_c = Counter(tokens).most_common(1)[0]
+        if top_c >= 3 and len(top_n) >= 2:
+            return True
+        # Very long nonsense for a short spoken greeting/question window.
+        if len(tokens) >= 14 and unique_ratio < 0.45:
+            return True
+    return False
+
+
 def should_retry_transcription(
     text: str,
     detected_language: str | None,
@@ -100,6 +125,11 @@ def should_retry_transcription(
     if detected_language == "en" and language_probability is not None and language_probability < 0.62:
         if indic_script_share(text) < 0.05:
             return True
+    counts = script_counts(text)
+    if counts.get("bn", 0) > 0 and (detected_language or "en") != "bn":
+        return True
+    if looks_like_roman_bangla(text) and (detected_language or "en") not in {"bn", "hi"}:
+        return True
     return False
 
 
@@ -149,6 +179,16 @@ def score_transcription(
                 score -= 90.0
             if det in {"ta", "te", "bn", "kn", "ml"} and det != hint:
                 score -= 70.0
+        elif hint == "bn":
+            if det == "bn" or counts.get("bn", 0) > 0:
+                score += 60.0
+            if looks_like_roman_bangla(text):
+                score += 35.0
+            wrong = sum(counts.get(lang, 0) for lang in ("hi", "ta", "te", "kn", "ml", "gu", "pa", "as"))
+            if wrong > 0 and counts.get("bn", 0) == 0:
+                score -= 90.0
+            if det in {"hi", "ta", "te", "kn", "ml"} and det != hint:
+                score -= 70.0
         elif det == hint or counts.get(hint, 0) > 0:
             score += 55.0
         elif det in INDIC_ASR_CANDIDATES and det != hint:
@@ -188,7 +228,7 @@ def detect_language_hint_from_text(text: str) -> str | None:
     lower = cleaned.lower()
     if _TELUGU_ROMAN.search(lower):
         return "te"
-    if _BENGALI_ROMAN.search(lower):
+    if looks_like_roman_bangla(cleaned):
         return "bn"
     if _ODIA_ROMAN.search(lower):
         return "hi"  # Odia not in Whisper; Hindi is closest supported fallback

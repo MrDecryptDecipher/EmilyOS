@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from emily.config.settings import EmilySettings
@@ -17,6 +17,16 @@ class DefaultKernelContext:
     logger: LoggerPort
     metrics: MetricsPort
     tracer: TracerPort
+    provider_router: Any | None = None
+    provider_analytics: Any | None = None
+    mission_runtime: Any | None = None
+    agent_supervisor: Any | None = None
+    memory_runtime: Any | None = None
+    tool_runtime: Any | None = None
+    desktop_runtime: Any | None = None
+    browser_runtime: Any | None = None
+    voice_runtime: Any | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
 
     @property
     def config(self) -> EmilySettings:
@@ -27,4 +37,4 @@ class DefaultKernelContext:
         return self.bus
 
     def get_extra(self, key: str, default: Any = None) -> Any:
-        return getattr(self, key, default)
+        return self.extras.get(key, default)

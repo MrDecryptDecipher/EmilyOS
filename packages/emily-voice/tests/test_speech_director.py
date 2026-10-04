@@ -100,6 +100,22 @@ def test_director_low_prefers_kokoro_over_heavy() -> None:
     assert plan.tts_backend == "kokoro"
 
 
+def test_director_roman_bangla_uses_indicf5_after_prep() -> None:
+    from types import SimpleNamespace
+
+    director = SpeechDirector()
+    plan = director.plan(
+        "Haan, ami ekhane achi, apnar sathe kotha bolchi.",
+        language_state=LanguageState(dominant="bn", confidence=0.95),
+        hardware=HardwareInfo(profile=HardwareProfile.MEDIUM, ram_gb=12, cpu_count=6),
+        available_backends=["kokoro", "indicf5", "voicebox"],
+        settings=SimpleNamespace(tts_default="voicebox", tts_device="cuda", voice_tts_prefer_lightweight=False),
+    )
+    assert plan.tts_backend == "indicf5"
+    assert "আমি" in plan.text
+    assert plan.language == "bn"
+
+
 def test_director_expressive_prefers_chatterbox() -> None:
     director = SpeechDirector()
     plan = director.plan(

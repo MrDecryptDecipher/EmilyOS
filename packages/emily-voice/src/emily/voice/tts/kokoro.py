@@ -9,9 +9,9 @@ from typing import Any
 import numpy as np
 
 from emily.voice.errors import BackendUnavailableError, TTSError
-from emily.voice.language import has_devanagari
+from emily.voice.language import has_bengali, has_devanagari
 from emily.voice.models import AudioChunk, SpeechPlan, TTSCapability
-from emily.voice.tts.registry import TTS_CAPABILITIES
+from emily.voice.tts.registry import TTS_CAPABILITIES, kokoro_supports
 
 # ISO / Emily language → Kokoro pipeline lang code
 _LANG_MAP: dict[str, str] = {
@@ -126,6 +126,12 @@ class KokoroTTS:
             for text, seg_lang in segment_items:
                 if not text.strip():
                     continue
+                if not kokoro_supports(seg_lang) or has_bengali(text):
+                    raise TTSError(
+                        f"kokoro cannot synthesize {seg_lang} (no pipeline for this script); "
+                        "use IndicF5 or Voicebox for Bengali/Tamil/Telugu",
+                        details={"backend": self.name, "language": seg_lang},
+                    )
                 # Kokoro Hindi G2P requires Devanagari — Latin Hinglish sounds wrong.
                 if seg_lang == "hi" and not has_devanagari(text):
                     # Latin left after prep — English pipeline (intelligible) beats broken Hindi G2P.

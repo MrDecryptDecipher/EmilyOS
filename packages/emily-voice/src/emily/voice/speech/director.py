@@ -6,7 +6,8 @@ from collections.abc import Sequence
 from typing import Any
 
 from emily.voice.hardware import detect_hardware
-from emily.voice.language import LanguageDetector, has_devanagari
+from emily.voice.language import LanguageDetector
+from emily.voice.speech.bangla_tts import prepare_bengali_for_tts
 from emily.voice.speech.hinglish_tts import prepare_hindi_for_tts
 from emily.voice.models import (
     HardwareInfo,
@@ -17,11 +18,16 @@ from emily.voice.models import (
     VoicePersonality,
 )
 from emily.voice.personality import DEFAULT_PERSONALITY
-from emily.voice.settings_bridge import prefer_lightweight_tts, voice_flag
+from emily.voice.settings_bridge import voice_flag
 from emily.voice.speech.prosody import compute_energy, compute_pace, compute_pitch
 from emily.voice.speech.segmentation import segment_for_speech
 from emily.voice.speech.styles import infer_emotion_from_text, is_expressive, style_from_personality
-from emily.voice.tts.registry import TTS_CAPABILITIES
+from emily.voice.tts.registry import (
+    TTS_CAPABILITIES,
+    backend_supports_language,
+    kokoro_supports,
+    language_requires_indicf5,
+)
 
 
 class SpeechDirector:
@@ -65,6 +71,7 @@ class SpeechDirector:
         available = set(available_backends or [])
 
         speak_text = prepare_hindi_for_tts(text.strip(), language=dominant)
+        speak_text = prepare_bengali_for_tts(speak_text, language=dominant)
 
         backend = self._prefer_backend(
             text=speak_text,
@@ -125,10 +132,12 @@ class SpeechDirector:
                 return False
             return name in TTS_CAPABILITIES
 
+        def supports(name: str) -> bool:
+            return backend_supports_language(name, dominant)
+
         low = hardware.profile == HardwareProfile.LOW
         default = str(voice_flag(settings, "tts_default", "kokoro") or "kokoro")
 
-        # On LOW: never prefer chatterbox/indicf5 unless only option
         def low_safe(name: str) -> bool:
             if not low:
                 return True
@@ -137,50 +146,22 @@ class SpeechDirector:
                 return not lighter
             return True
 
-        if default and ok(default) and low_safe(default):
-            # Still allow language-specific override below when stronger match exists
-            pass
+        if expressive and ok("chatterbox") and supports("chatterbox") and not low:
+            return "chatterbox"
 
-        if LanguageDetector.is_indian(dominant):
-            # Prefer Voicebox preset sweet-girl voice when the local API is up.
-            if ok("voicebox") and low_safe("voicebox"):
-                return "voicebox"
+        for name in ("voicebox", "kokoro", "chatterbox", "indicf5"):
+            if ok(name) and supports(name) and low_safe(name):
+                return name
 
-            # Hindi/Hinglish → Kokoro hf_beta (needs Devanagari — prepared upstream).
-            if dominant == "hi" and ok("kokoro"):
-                return "kokoro"
-
-            if default == "voicebox" and ok("kokoro"):
-                return "kokoro"
-
-            # IndicF5 refs are Hindi/Marathi-oriented; other Indic scripts → Kokoro (faster, less hang).
-            if dominant in {"ta", "te", "kn", "ml", "gu", "pa", "as"} and ok("kokoro"):
-                return "kokoro"
-            # GPU / medium+ hardware: IndicF5 for natural Hindi/Indic prosody (Devanagari only).
-            if (
-                dominant == "hi"
-                and has_devanagari(text)
-                and ok("indicf5")
-                and low_safe("indicf5")
-                and not prefer_lightweight_tts(settings)
-            ):
+        if not kokoro_supports(dominant) or language_requires_indicf5(dominant):
+            for name in ("indicf5", "voicebox", "chatterbox"):
+                if ok(name) and low_safe(name):
+                    return name
+            if ok("indicf5"):
                 return "indicf5"
-            # CPU or low-end: Kokoro is fast (accent is less natural for Hindi).
-            if ok("kokoro") and (prefer_lightweight_tts(settings) or low):
-                return "kokoro"
-            if ok("chatterbox") and low_safe("chatterbox"):
-                return "chatterbox"
-            if ok("indicf5") and low_safe("indicf5"):
-                return "indicf5"
-            if ok("kokoro"):
-                return "kokoro"
-
-        if ok("voicebox") and low_safe("voicebox"):
-            return "voicebox"
 
         if expressive and ok("chatterbox") and not low:
             return "chatterbox"
-
         if ok(default) and low_safe(default):
             return default
         if ok("kokoro"):
@@ -189,10 +170,7 @@ class SpeechDirector:
             return "chatterbox"
         if ok("indicf5") and low_safe("indicf5"):
             return "indicf5"
-        # Only heavy option left
         for name in ("voicebox", "kokoro", "chatterbox", "indicf5"):
             if ok(name):
                 return name
-        if LanguageDetector.is_indian(dominant):
-            return "indicf5"
         return default or "kokoro"

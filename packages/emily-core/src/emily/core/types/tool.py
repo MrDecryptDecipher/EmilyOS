@@ -10,4 +10,5 @@ class ToolPermissionLevel(StrEnum):
     NETWORK = "network"
     DESKTOP = "desktop"
     BROWSER = "browser"
+    VOICE = "voice"
     PRIVILEGED = "privileged"

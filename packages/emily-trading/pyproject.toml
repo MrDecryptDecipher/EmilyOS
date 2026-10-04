@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emily-trading"
+version = "0.1.0"
+description = "Emily OS — Trading & Risk Engine"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "emily-core",
+  "emily-events",
+  "emily-config",
+  "emily-kernel",
+  "emily-security",
+  "pydantic>=2.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
