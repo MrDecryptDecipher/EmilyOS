@@ -8,13 +8,13 @@ Multi-agent reasoning · durable missions · real desktop & browser automation �
 [![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white)](#requirements)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
-[![Status](https://img.shields.io/badge/milestones-0–8%20complete-success)](#roadmap)
+[![Status](https://img.shields.io/badge/milestones-0-8%20complete-success)](#roadmap)
 [![Tests](https://img.shields.io/badge/tests-344%20functions-informational)](#quality-gates)
 [![Packages](https://img.shields.io/badge/workspace-19%20packages-blueviolet)](#monorepo-layout)
 
-[![Emily OS — 35-second launch film](brag-output/brag.jpg)](brag-output/brag.mp4)
+[![Emily OS launch film](brag-output/brag-preview.gif)](https://github.com/MrDecryptDecipher/EmilyOS/releases/latest)
 
-▶ **Watch the 35-second launch film:** [`brag-output/brag.mp4`](brag-output/brag.mp4)
+▶ **Watch the full 35-second launch film:** [MP4 in repo](brag-output/brag.mp4) | [GitHub Release](https://github.com/MrDecryptDecipher/EmilyOS/releases/latest)
 
 </div>
 
@@ -23,7 +23,7 @@ Multi-agent reasoning · durable missions · real desktop & browser automation �
 Emily OS is not a chatbot wrapper. It is a modular, event-driven operating
 platform in which the intelligence is the operating system itself: an executive
 kernel coordinates nineteen bounded-context packages that plan, execute,
-verify, and remember — then act on the real machine through native Windows,
+verify, and remember - then act on the real machine through native Windows,
 browser, vision, and voice runtimes.
 
 ## Table of contents
@@ -52,52 +52,59 @@ Modern work is spread across dozens of apps that share nothing. Assistants can
 talk, but they cannot operate the machine, and nothing about their reasoning is
 inspectable. Emily closes that gap with one platform:
 
-- **It reasons** — missions are decomposed by a provider-backed planner and run
+- **It reasons** - missions are decomposed by a provider-backed planner and run
   as durable graphs, not one-shot prompts.
-- **It acts** — a permission-gated tool runtime drives real Win32 windows, a
+- **It acts** - a permission-gated tool runtime drives real Win32 windows, a
   real Chromium browser, and on-device screenshot understanding.
-- **It listens and speaks** — a local, multilingual voice loop with VAD,
+- **It listens and speaks** - a local, multilingual voice loop with VAD,
   streaming ASR, barge-in, and a four-engine TTS router.
-- **It remembers** — sixteen kinds of memory plus a continuously updated world
+- **It remembers** - sixteen kinds of memory plus a continuously updated world
   model of entities, relations, and facts.
-- **It stays observable** — every subsystem emits typed events, metrics, traces,
+- **It stays observable** - every subsystem emits typed events, metrics, traces,
   and a tamper-evident, SHA-256 hash-chained audit log.
 
 ## What it is
 
+The whole capability map, from the executive kernel down to the runtimes:
+
 ```mermaid
-mindmap
-  root((Emily OS))
-    Executive Kernel
-      lifecycle FSM
-      subsystem registry
-      8-phase orchestration
-      typed event bus
-    Cognition
-      Provider fabric
-      LangGraph missions
-      Multi-agent supervisor
-      Memory + world model
-    Runtimes
-      Tools + MCP
-      Desktop Win32
-      Browser Playwright
-      Vision OCR YOLO
-      Voice 23 languages
-    Trust
-      Capability tokens
-      Approval gates
-      Hash-chained audit
-      Observability
-    Surface
-      emily CLI
-      Workbench UI
-      Voice cockpit
+flowchart TB
+  ROOT(["Emily OS"])
+  ROOT --> A["Executive Kernel"]
+  ROOT --> B["Cognition"]
+  ROOT --> C["Runtimes"]
+  ROOT --> D["Trust"]
+  ROOT --> E["Surface"]
+
+  A --> A1["lifecycle FSM"]
+  A --> A2["subsystem registry"]
+  A --> A3["8-phase orchestration"]
+  A --> A4["typed event bus"]
+
+  B --> B1["Provider fabric"]
+  B --> B2["LangGraph missions"]
+  B --> B3["Multi-agent supervisor"]
+  B --> B4["Memory + world model"]
+
+  C --> C1["Tools + MCP"]
+  C --> C2["Desktop Win32"]
+  C --> C3["Browser Playwright"]
+  C --> C4["Vision OCR + YOLO"]
+  C --> C5["Voice 23 languages"]
+
+  D --> D1["Capability tokens"]
+  D --> D2["Approval gates"]
+  D --> D3["Hash-chained audit"]
+  D --> D4["Observability"]
+
+  E --> E1["emily CLI"]
+  E --> E2["Workbench UI"]
+  E --> E3["Voice cockpit"]
 ```
 
 ## Architecture
 
-The kernel owns lifecycle and coordination only — never reasoning. Every
+The kernel owns lifecycle and coordination only - never reasoning. Every
 capability lives in a package that implements a protocol port defined in
 `emily-core`, communicates over the event bus, and registers its tools with the
 unified tool runtime.
@@ -105,35 +112,35 @@ unified tool runtime.
 ```mermaid
 flowchart TB
   subgraph UX["Experience layer"]
-    CLI["emily CLI<br/>72 commands"]
-    WB["Workbench UI<br/>React + Vite"]
-    VOICEC["Voice cockpit<br/>legacy.html"]
+    CLI["emily CLI - 72 commands"]
+    WB["Workbench UI - React + Vite"]
+    VOICEC["Voice cockpit - legacy.html"]
   end
 
   subgraph KERNEL["Executive kernel"]
-    KER["Kernel<br/>lifecycle FSM + registry"]
-    BUS["Async event bus<br/>59 typed events"]
-    ORCH["Deep orchestration<br/>8-phase workflow"]
+    KER["Kernel - lifecycle FSM + registry"]
+    BUS["Async event bus - 59 typed events"]
+    ORCH["Deep orchestration - 8-phase workflow"]
   end
 
   subgraph COGNITION["Cognition"]
-    PROV["Providers<br/>NVIDIA NIM + RoutesMe"]
-    MIS["Missions<br/>LangGraph"]
-    AG["Agents<br/>14 roles"]
-    MEM["Memory<br/>16 kinds + world model"]
+    PROV["Providers - NVIDIA NIM + RoutesMe"]
+    MIS["Missions - LangGraph"]
+    AG["Agents - 14 roles"]
+    MEM["Memory - 16 kinds + world model"]
   end
 
   subgraph RUNTIMES["Runtimes"]
-    TOOLS["Tools + MCP<br/>30 tools"]
-    DESK["Desktop<br/>Win32"]
-    BROW["Browser<br/>Playwright + CDP"]
-    VIS["Vision<br/>OCR + YOLOv8"]
-    VOICE["Voice<br/>Kokoro/IndicF5/Chatterbox"]
+    TOOLS["Tools + MCP - 30 tools"]
+    DESK["Desktop - Win32"]
+    BROW["Browser - Playwright + CDP"]
+    VIS["Vision - OCR + YOLOv8"]
+    VOICE["Voice - Kokoro / IndicF5 / Chatterbox"]
   end
 
   subgraph TRUST["Trust"]
-    SEC["Security<br/>tokens · approval · audit"]
-    OBS["Observability<br/>metrics · traces · replay"]
+    SEC["Security - tokens + approval + audit"]
+    OBS["Observability - metrics + traces + replay"]
   end
 
   UX --> KER
@@ -147,8 +154,8 @@ flowchart TB
   TRUST -. events .-> BUS
 ```
 
-**Kernel lifecycle** — start/stop ordering is priority-driven; a failed start
-flips the kernel to `FAILED` and surfaces the error.
+**Kernel lifecycle** - start and stop ordering is priority-driven; a failed
+start flips the kernel to `FAILED` and surfaces the error.
 
 ```mermaid
 stateDiagram-v2
@@ -163,7 +170,7 @@ stateDiagram-v2
   STOPPED --> [*]
 ```
 
-**Event model** — one in-process async bus with prefix subscriptions,
+**Event model** - one in-process async bus with prefix subscriptions,
 middleware "onion" wrapping, and per-handler exception isolation so a failing
 subscriber can never break delivery.
 
@@ -179,8 +186,8 @@ flowchart LR
 
 ## How a mission runs
 
-A mission is the unit of work: `Mission → Objective → Task`, executed on a
-LangGraph backbone with checkpoints and first-class pause / resume / cancel.
+A mission is the unit of work: `Mission -> Objective -> Task`, executed on a
+LangGraph backbone with checkpoints and first-class pause, resume, and cancel.
 
 ```mermaid
 sequenceDiagram
@@ -193,8 +200,8 @@ sequenceDiagram
   participant P as ProviderRouter
   participant MEM as Memory + world model
 
-  U->>CLI: emily mission run "Research. Draft. Deliver."
-  CLI->>M: create + start
+  U->>CLI: emily mission run Research Draft Deliver
+  CLI->>M: create and start
   M->>G: plan
   G->>P: decompose goal
   P-->>G: task graph
@@ -202,13 +209,13 @@ sequenceDiagram
     G->>A: execute objective
     A->>P: work
     P-->>A: result
-    A->>A: verify → critique → retry
+    A->>A: verify then critique then retry
     A-->>G: verified result
-    G->>MEM: emit mission/agent events
+    G->>MEM: emit mission and agent events
   end
-  G->>M: finalize + checkpoint
+  G->>M: finalize and checkpoint
   M-->>CLI: durable mission archive
-  CLI-->>U: summary, tokens, cost
+  CLI-->>U: summary tokens and cost
 ```
 
 Execution graph:
@@ -223,7 +230,7 @@ flowchart LR
   REFLECT -->|revise| EXEC
 ```
 
-The planner is **provider-backed and fails closed** — it never emits a silent
+The planner is **provider-backed and fails closed** - it never emits a silent
 fake plan; a deterministic heuristic path is used only when explicitly
 requested.
 
@@ -236,22 +243,22 @@ sequenceDiagram
   participant R as ProviderRouter
   participant N as NVIDIA NIM
   participant S as RoutesMe
-  R->>N: complete() / stream()
+  R->>N: complete or stream
   alt healthy
-    N-->>R: completion + latency/token/cost analytics
+    N-->>R: completion plus latency token cost analytics
   else timeout or error
-    R->>S: failover complete()
-    S-->>R: completion + analytics
+    R->>S: failover complete
+    S-->>R: completion plus analytics
   end
 ```
 
-Two adapters over one OpenAI-compatible transport, default-on failover, transport
-retries, streaming SSE parsing, and per-call cost accounting.
+Two adapters over one OpenAI-compatible transport, default-on failover,
+transport retries, streaming SSE parsing, and per-call cost accounting.
 
 ### Multi-agent verification loop
 
 Ephemeral agents are spawned from a role registry, supervised with a concurrency
-pool, and driven through a work → verify → critique → capped-retry loop that
+pool, and driven through a work, verify, critique, and capped-retry loop that
 returns a structured `VerificationDecision`. Teams run as sequential pipelines
 with handoff, or concurrent fan-out.
 
@@ -260,10 +267,10 @@ flowchart LR
   W["work"] --> V["verify"]
   V -->|pass| DONE["accept"]
   V -->|fail| C["critique feedback"]
-  C --> R["retry (capped by role)"]
+  C --> R["retry capped by role"]
   R --> W
+
   subgraph TEAM["Agent team"]
-    direction LR
     A1["researcher"] --> A2["coder"] --> A3["verifier"]
   end
 ```
@@ -276,13 +283,13 @@ upserts entities, relations, and facts.
 
 ```mermaid
 flowchart TB
-  EV["mission.* / agent.* events"] --> STORE["MemoryStore<br/>working · episodic · semantic · task · preferences …"]
-  STORE --> RET["LexicalRetriever<br/>0.55 overlap + 0.25 importance + 0.20 recency"]
-  STORE --> CONS["Consolidator<br/>promote + prune"]
+  EV["mission and agent events"] --> STORE["MemoryStore - working + episodic + semantic + task + preferences"]
+  STORE --> RET["LexicalRetriever - 0.55 overlap + 0.25 importance + 0.20 recency"]
+  STORE --> CONS["Consolidator - promote + prune"]
   EV --> WM["World model"]
   WM --> ENT["Entities"]
   WM --> REL["Relations"]
-  WM --> FACT["Facts (capped, snapshotted)"]
+  WM --> FACT["Facts - capped and snapshotted"]
 ```
 
 ## Runtimes: tools, desktop, browser, voice, vision
@@ -293,37 +300,37 @@ hot-reloaded over a real stdio JSON-RPC client.
 
 ```mermaid
 flowchart LR
-  AG["Agent"] --> REG["Tool registry<br/>30 tools"]
-  REG --> POL{"Permission policy<br/>8 levels + capability token"}
-  POL -->|allowed| EX["Executor<br/>timeout + events"]
+  AG["Agent"] --> REG["Tool registry - 30 tools"]
+  REG --> POL{"Permission policy - 8 levels + capability token"}
+  POL -->|allowed| EX["Executor - timeout + events"]
   POL -->|denied| DENY["tool.denied event"]
-  EX --> B["Builtins<br/>echo · clock · math · text"]
-  EX --> D["desktop.*"]
-  EX --> R["browser.*"]
-  EX --> V["voice.*"]
-  EX --> S["vision_*"]
-  EX --> M["mcp.* (hot reload)"]
+  EX --> B["Builtins - echo + clock + math + text"]
+  EX --> D["desktop tools"]
+  EX --> R["browser tools"]
+  EX --> V["voice tools"]
+  EX --> S["vision tools"]
+  EX --> M["mcp tools - hot reload"]
 ```
 
 ```mermaid
 flowchart TB
-  AG["Agent / mission"] --> D["Desktop runtime"]
+  AG["Agent or mission"] --> D["Desktop runtime"]
   AG --> B["Browser runtime"]
   AG --> VO["Voice runtime"]
   AG --> VI["Vision runtime"]
 
-  D --> D1["Win32 windows · clipboard"]
-  D --> D2["SendInput · PowerShell · winreg"]
+  D --> D1["Win32 windows + clipboard"]
+  D --> D2["SendInput + PowerShell + winreg"]
 
   B --> B1["Chromium persistent profiles"]
   B --> B2["CDP accessibility-tree grounding"]
 
-  VO --> VO1["VAD → streaming ASR (faster-whisper)"]
-  VO --> VO2["Speech Director → TTS router"]
-  VO --> VO3["barge-in · wake word"]
+  VO --> VO1["VAD to streaming ASR - faster-whisper"]
+  VO --> VO2["Speech Director to TTS router"]
+  VO --> VO3["barge-in + wake word"]
 
-  VI --> VI1["Screen OCR (Tesseract / winOCR)"]
-  VI --> VI2["YOLOv8 objects · DeepFace emotion"]
+  VI --> VI1["Screen OCR - Tesseract or winOCR"]
+  VI --> VI2["YOLOv8 objects + DeepFace emotion"]
 ```
 
 **Voice routing** picks a backend by language support, hardware, and
@@ -331,12 +338,12 @@ expressiveness, and keeps a backend pinned for a consistent turn:
 
 ```mermaid
 flowchart LR
-  T["Text + language"] --> SD["Speech Director<br/>emotion · pace · segments"]
-  SD --> RT{"TTS router<br/>scored fallback"}
-  RT --> K["Kokoro<br/>9 ISO languages"]
-  RT --> I["IndicF5<br/>11 Indic languages"]
-  RT --> C["Chatterbox<br/>23 languages"]
-  RT --> VB["Voicebox REST<br/>23 languages"]
+  T["Text + language"] --> SD["Speech Director - emotion + pace + segments"]
+  SD --> RT{"TTS router - scored fallback"}
+  RT --> K["Kokoro - 9 ISO languages"]
+  RT --> I["IndicF5 - 11 Indic languages"]
+  RT --> C["Chatterbox - 23 languages"]
+  RT --> VB["Voicebox REST - 23 languages"]
   K --> OUT["Audio out"]
   I --> OUT
   C --> OUT
@@ -347,8 +354,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  ACT["Privileged action"] --> TOK{"Capability token<br/>grants + expiry"}
-  TOK -->|valid| GATE{"Approval gate<br/>human-in-the-loop"}
+  ACT["Privileged action"] --> TOK{"Capability token - grants + expiry"}
+  TOK -->|valid| GATE{"Approval gate - human-in-the-loop"}
   TOK -->|invalid| BLOCK["Denied"]
   GATE -->|approved| RUN["Execute"]
   GATE -->|pending| WAIT["Await review"]
@@ -356,14 +363,14 @@ flowchart LR
 ```
 
 Every operation is appended to a **SHA-256 hash chain** seeded with `GENESIS`;
-`verify_integrity()` re-walks the file and detects any tampering.
+`verify_integrity` re-walks the file and detects any tampering.
 
 ```mermaid
 flowchart LR
-  E1["event #1"] --> H1["H1 = SHA256(GENESIS ∥ e1)"]
-  H1 --> H2["H2 = SHA256(H1 ∥ e2)"]
-  H2 --> H3["H3 = SHA256(H2 ∥ e3)"]
-  H3 --> VER["verify_integrity() ✓"]
+  E1["event 1"] --> H1["H1 = SHA256 of GENESIS + e1"]
+  H1 --> H2["H2 = SHA256 of H1 + e2"]
+  H2 --> H3["H3 = SHA256 of H2 + e3"]
+  H3 --> VER["verify_integrity - OK"]
 ```
 
 Observability is first-class: structured JSON logs, durable JSONL metrics and
@@ -373,28 +380,33 @@ engine that records per-step mission frames and can reload them exactly.
 ```mermaid
 flowchart LR
   RUNTIME["Runtime"] --> LOG["JSON logs"]
-  RUNTIME --> MET["Metrics (JSONL)"]
-  RUNTIME --> TR["Traces / spans"]
-  RUNTIME --> REP["Execution replay (per-mission frames)"]
-  RUNTIME --> EV["Typed events → Workbench"]
+  RUNTIME --> MET["Metrics - JSONL"]
+  RUNTIME --> TR["Traces and spans"]
+  RUNTIME --> REP["Execution replay - per-mission frames"]
+  RUNTIME --> EV["Typed events to Workbench"]
 ```
 
 ## The Workbench
 
 A React + Vite control plane (`apps/emily-ui`) reads live state from the FastAPI
-server: health, telemetry over WebSocket, missions, agents, chat, a non-custodial
-wallet + x402 payment-requirement inspector, and an offline Web3 security
-workbench. Values are reported by the backend and never estimated.
+server: health, telemetry over WebSocket, missions, agents, chat, a
+non-custodial wallet plus x402 payment-requirement inspector, and an offline
+Web3 security workbench. Values are reported by the backend and never estimated.
 
 ```mermaid
 flowchart LR
   subgraph UI["Workbench views"]
-    OV["Overview"]; MI["Missions"]; AGv["Agents"]; CH["Chat"]; WA["Wallet + x402"]; SE["Security"]
+    OV["Overview"]
+    MI["Missions"]
+    AGG["Agents"]
+    CH["Chat"]
+    WA["Wallet + x402"]
+    SE["Security"]
   end
-  UI --> API["FastAPI server<br/>25 endpoints"]
+  UI --> API["FastAPI server - 25 endpoints"]
   API --> KER["Kernel health"]
-  API --> TEL["/ws/telemetry (1 Hz)"]
-  API --> M["missions / agents"]
+  API --> TEL["ws/telemetry at 1 Hz"]
+  API --> M["missions and agents"]
   API --> SEC["security workbench"]
 ```
 
@@ -428,7 +440,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  CORE["emily-core<br/>ports + types"] --> EVENTS["emily-events"]
+  CORE["emily-core - ports + types"] --> EVENTS["emily-events"]
   CORE --> CONFIG["emily-config"]
   CORE --> OBS["emily-observability"]
   EVENTS --> KERNEL["emily-kernel"]
@@ -516,10 +528,10 @@ everything else is `EMILY_`-prefixed environment variables documented in
 ## Quality gates
 
 ```powershell
-pytest                # test suite
+pytest
 ruff check packages apps tests
 black --check packages apps tests
-mypy                  # strict
+mypy
 ```
 
 344 test functions across 86 test files, branch-aware coverage with a 70%
@@ -540,12 +552,12 @@ flowchart LR
   M8 --> NEXT["Vision follow-on + later milestones"]
 ```
 
-Milestones 0–8 are complete. See [`docs/architecture/`](docs/architecture) for
+Milestones 0-8 are complete. See [`docs/architecture/`](docs/architecture) for
 the full design notes and per-milestone test reports.
 
 ## License
 
-Apache-2.0 — see [`LICENSE`](LICENSE).
+Apache-2.0 - see [`LICENSE`](LICENSE).
 
 ---
 
